@@ -28,7 +28,7 @@ class Orchestrator:
     The central OS of the Company-IA. It manages agents, communication flow,
     history, tools, and all system protocols.
     """
-    def __init__(self, model_name="gemini-1.5-pro-latest"):
+    def __init__(self, model_name="gemini-2.5-flash"):
         """
         Initializes the entire multi-agent system.
         """
@@ -97,6 +97,8 @@ class Orchestrator:
         response = self.model.generate_content(messages)
         return response.text
 
+    # In core_logic/orchestrator.py
+
     def route_message(self, message: dict) -> dict:
         """
         Routes a structured message from a sender to a recipient and processes
@@ -105,6 +107,13 @@ class Orchestrator:
         sender_id = message['sender']
         recipient_id = message['recipient']
 
+        # --- NEW: Handle messages intended for the human user ---
+        # If the recipient is the user, it means the conversation flow has
+        # reached its end for this turn, and we should output the result.
+        if recipient_id == 'user':
+            print(f"[Orchestrator] Message for user from '{sender_id}'. Final output.")
+            return message # Return the final message object directly.
+
         # Convert the structured message to a string for the receiving agent's LLM
         task_prompt = communication_protocol.parse_message_for_llm(message)
         
@@ -112,20 +121,32 @@ class Orchestrator:
         recipient_agent = self.agents[recipient_id]
         response_message = recipient_agent.execute_task(task_prompt)
         
+        # Prepare the response for the next step in the chain
+        response_message_full = {
+            "sender": recipient_id,
+            "recipient": self.get_parent(recipient_id) or 'user',
+            **response_message
+        }
+        
         response_intent = response_message.get("intent")
-        response_payload = response_message.get("payload", {})
         
         # If the response is a question, trigger the escalation protocol
         if response_intent == "REQUEST_INFORMATION":
+            # NOTE: We pass the full response message to the protocol now
             return escalation_protocol.handle_question_escalation(
                 self,
                 start_agent_id=recipient_id,
-                question_payload=response_payload
+                message=response_message_full
             )
         
-        # If the response is to delegate further, this can be expanded later
-        # For now, we just return the information.
-        return response_message
+        # If the response is to delegate, handle it.
+        # This part of the logic is simplified for now.
+        if response_intent == "ASSIGN_TASK":
+             # In a future version, you could call the delegation_protocol here.
+             pass
+
+        # Otherwise, route the information to the next agent up the chain
+        return self.route_message(response_message_full)
 
     def delegate_task(self, agent_id: str, task_prompt: str) -> str:
         """
