@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+*.venv/
+ENV/
+env/
+# NOTE: The name of your virtual environment folder may vary.
+
+# Environment variables
+# CRITICAL: Prevents your API key from being uploaded.
+.env
+
+# Local database files
+# Keeps your local ChromaDB instance out of the repository.
+chroma_db/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
