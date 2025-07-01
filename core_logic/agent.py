@@ -6,6 +6,8 @@ AI workers in the organization.
 """
 
 from config.prompts import AGENT_PROMPTS
+from config.communication_definitions import COMMUNICATION_DEFINITIONS
+
 
 class Agent:
     """
@@ -37,28 +39,90 @@ class Agent:
         """
         return f"Agent(id='{self.agent_id}')"
 
-    def execute_task(self, structured_message: dict) -> dict:
+    def _determine_intent(self, task_prompt: str) -> str:
         """
-        The main thinking loop for an agent.
+        Uses the LLM to determine the primary intent of a given task.
+        """
+        print(f"[{self.agent_id}] Determining intent for task: '{task_prompt[:50]}...'")
 
-        This method will eventually determine the agent's intent,
-        query the knowledge base, and then ask the Orchestrator to
-        query the LLM to get a final response.
+        # Create a list of possible intents from our config file
+        possible_intents = [
+            f"- {intent['name']}: {intent['description']}"
+            for intent in COMMUNICATION_DEFINITIONS['INTENT_DOMAIN']['primary_intents']
+        ]
+        intent_list_str = "\n".join(possible_intents)
 
-        For now, it's a placeholder.
+        prompt = f"""
+        Given the following task, which of these primary intents is most appropriate?
+        Respond with ONLY the name of the intent (e.g., ASSIGN_TASK).
+
+        Task: "{task_prompt}"
+
+        Possible Intents:
+        {intent_list_str}
+        """
+
+        # This is a simple, direct call to the LLM.
+        response = self.orchestrator.direct_llm_query(prompt)
+        # Clean up the response to get only the intent name
+        determined_intent = response.strip().upper()
+        print(f"[{self.agent_id}] Determined Intent: {determined_intent}")
+        return determined_intent
+
+    def execute_task(self, task_prompt: str) -> dict:
+        """
+        The main thinking loop for an agent. It determines intent, checks
+        knowledge, executes the core logic, and prepares a structured response.
 
         Args:
-            structured_message (dict): A message object following our defined protocol.
+            task_prompt (str): The plain text task assigned to the agent.
 
         Returns:
-            dict: A response message object.
+            dict: A response message object to be routed by the Orchestrator.
         """
-        print(f"[{self.agent_id}] received task: {structured_message.get('payload', {})}")
-        # --- FUTURE LOGIC WILL GO HERE ---
-        # 1. Determine core intent from the message.
-        # 2. Query the KnowledgeBase via the Orchestrator for relevant facts.
-        # 3. If no facts, formulate a prompt for the LLM.
-        # 4. Call the Orchestrator to query the LLM.
-        # 5. Process the LLM's response to see if it's a final answer or a question to be escalated.
-        # 6. Return a structured response message.
-        pass
+        print(f"[{self.agent_id}] received task: '{task_prompt}'")
+
+        # 1. First, check the knowledge base for a direct answer.
+        # This saves on complex processing if the answer is already known.
+        relevant_fact = self.orchestrator.knowledge_base.search_fact(task_prompt)
+        if relevant_fact:
+            print(f"[{self.agent_id}] Found relevant fact in Knowledge Base.")
+            return {
+                "intent": "PROVIDE_INFORMATION",
+                "payload": {
+                    "EXECUTIVE_SUMMARY": "Answer found in knowledge base.",
+                    "DETAILS": relevant_fact,
+                    "POTENTIAL_IMPACT": "None. This is previously established information."
+                }
+            }
+
+        # 2. If no fact is found, determine the core intent of the task.
+        intent = self._determine_intent(task_prompt)
+
+        # 3. Execute the main logic based on the determined intent.
+        # For now, we will simplify this. A more advanced version would have
+        # different logic paths for each intent. Here, we just assume the
+        # agent needs to think about the task.
+        print(f"[{self.agent_id}] Executing main logic for intent: {intent}")
+        history = self.orchestrator.get_history(self.agent_id)
+        llm_response = self.orchestrator.query_llm(self.agent_id, task_prompt, history)
+        
+        # 4. Analyze the LLM's response to formulate a final action.
+        if llm_response.strip().startswith("[QUESTION]"):
+            # If the agent needs more info, its final action is to escalate.
+            question_text = llm_response.strip().replace("[QUESTION]", "").strip()
+            return {
+                "intent": "REQUEST_INFORMATION",
+                "payload": {"QUESTION": question_text}
+            }
+        else:
+            # Otherwise, its final action is to provide the generated information.
+            self.orchestrator.add_to_history(self.agent_id, 'model', llm_response)
+            return {
+                "intent": "PROVIDE_INFORMATION",
+                "payload": {
+                    "EXECUTIVE_SUMMARY": f"Completed task: {task_prompt[:30]}...",
+                    "DETAILS": llm_response,
+                    "POTENTIAL_IMPACT": "Varies based on content."
+                }
+            }

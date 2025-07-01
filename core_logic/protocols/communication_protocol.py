@@ -7,7 +7,36 @@ of the system.
 """
 
 from config.logic_mapping import LOGIC_MAPPING
-from config.communication_definitions import COMMUNICATION_DEFINITIONS
+
+
+def _get_direction(orchestrator, sender_id: str, recipient_id: str) -> str:
+    """
+    Determines the hierarchical direction of communication.
+
+    Args:
+        orchestrator: The main orchestrator instance.
+        sender_id: The ID of the agent sending the message.
+        recipient_id: The ID of the agent receiving the message.
+
+    Returns:
+        A string: "UPWARD", "DOWNWARD", "HORIZONTAL", or "SELF".
+    """
+    if sender_id == recipient_id:
+        return "SELF"
+
+    sender_parent = orchestrator.get_parent(sender_id)
+    recipient_parent = orchestrator.get_parent(recipient_id)
+
+    if sender_parent == recipient_id:
+        return "UPWARD"
+    if recipient_parent == sender_id:
+        return "DOWNWARD"
+    if sender_parent == recipient_parent:
+        return "HORIZONTAL"
+
+    # Default case for more complex relationships (e.g., uncle/nephew),
+    # which we can treat as horizontal for now.
+    return "HORIZONTAL"
 
 
 def build_structured_message(orchestrator, sender_id: str, recipient_id: str, intent: str, payload: dict) -> dict:
@@ -25,33 +54,48 @@ def build_structured_message(orchestrator, sender_id: str, recipient_id: str, in
     Returns:
         A dictionary representing the fully structured message.
     """
-    print(f"Building message from '{sender_id}' to '{recipient_id}' with intent '{intent}'.")
+    print(f"[Protocol] Building message from '{sender_id}' to '{recipient_id}' with intent '{intent}'.")
+
+    direction = _get_direction(orchestrator, sender_id, recipient_id)
+    print(f"[Protocol] Determined communication direction: {direction}")
+
+    # Find the matching rule in our logic mapping
+    found_rule = None
+    for rule in LOGIC_MAPPING['decision_rules']:
+        conditions = rule['if_conditions']
+        if (conditions.get('intent_is') == intent and
+                conditions.get('direction_is') == direction):
+            found_rule = rule
+            break
+
+    # If no specific rule is found, use the default fallback rule
+    if not found_rule:
+        found_rule = next(
+            rule for rule in LOGIC_MAPPING['decision_rules'] if rule['rule_id'] == 'LGC-DEFAULT'
+        )
+        print(f"[Protocol] No specific rule found. Using default.")
+
+    print(f"[Protocol] Applying rule: {found_rule['rule_id']} - {found_rule['description']}")
     
-    # --- FUTURE LOGIC WILL GO HERE ---
-    # 1. Determine communication direction (UPWARD, DOWNWARD, HORIZONTAL) by
-    #    comparing sender and recipient in orchestrator.hierarchy.
-    #
-    # 2. Search through LOGIC_MAPPING['decision_rules'] to find the rule that
-    #    matches the intent and direction.
-    #
-    # 3. Use the found rule to get the correct strategy (tone, urgency) and
-    #    expression format (e.g., 'QUERY', 'ORDER').
-    #
-    # 4. Assemble the final message object using the determined components
-    #    and the provided payload.
-    #
-    # Example placeholder return:
-    return {
+    outcome = found_rule['then_outcome']
+    strategy = outcome['select_strategy']
+    expression_mode = outcome['select_expression']
+
+    # Assemble the final message object
+    final_message = {
         "sender": sender_id,
         "recipient": recipient_id,
         "intent": intent,
         "strategy": {
-            "tone": ["DIRECTIVE"],
-            "urgency": "MEDIUM"
+            "tone": strategy['tone'],
+            "urgency": strategy['urgency'],
+            "message_structure": strategy['message_structure']
         },
-        "expression_mode": "ORDER",
+        "expression_mode": expression_mode,
         "payload": payload
     }
+
+    return final_message
 
 
 def parse_message_for_llm(structured_message: dict) -> str:
@@ -65,9 +109,19 @@ def parse_message_for_llm(structured_message: dict) -> str:
     Returns:
         A plain string representation of the message for the LLM.
     """
-    # --- FUTURE LOGIC WILL GO HERE ---
-    # This function will format the message nicely. For example:
-    # "You have received an ORDER with MEDIUM urgency. The instruction is: ..."
+    mode = structured_message.get("expression_mode", "UNKNOWN")
+    payload = structured_message.get("payload", {})
     
-    payload_str = ", ".join(f"{k}: '{v}'" for k, v in structured_message.get("payload", {}).items())
-    return f"Received a message. Intent: {structured_message.get('intent')}. Payload: {payload_str}"
+    # This formatting can be made much more sophisticated, but this provides a clean, readable output.
+    prompt_lines = [
+        f"You have received a new task formatted as a '{mode}'.",
+        "--- Task Details ---"
+    ]
+    for key, value in payload.items():
+        # Format the key nicely (e.g., 'KEY_INSTRUCTION' -> 'Key Instruction')
+        formatted_key = key.replace('_', ' ').title()
+        prompt_lines.append(f"- {formatted_key}: {value}")
+    prompt_lines.append("--------------------")
+    prompt_lines.append("Determine your next action based on this information and your role.")
+
+    return "\n".join(prompt_lines)
