@@ -1,0 +1,12 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  company-ia:
+    build: .
+    ports:
+      - "7861:7861"
+    volumes:
+      - ./virtual_fs:/app/virtual_fs
+      - ./logs:/app/logs
