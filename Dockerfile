@@ -1,23 +1,19 @@
 # Dockerfile
-
-# Use an official lightweight Python image as a parent image
 FROM python:3.11-slim
 
-# Set the working directory inside the container
+# --- NUEVO: Establecer el idioma del sistema operativo ---
+ENV LANG C.UTF-8
+ENV LANGUAGE C.UTF-8
+
+RUN apt-get update && apt-get install -y build-essential curl
+
 WORKDIR /app
 
-# Copy the requirements file into the container at /app
+# ... (el resto del archivo sigue igual) ...
 COPY requirements.txt .
-
-# Install any needed packages specified in requirements.txt
-# --no-cache-dir ensures the image is smaller
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the application's code into the container at /app
+COPY entrypoint.sh .
+RUN chmod +x ./entrypoint.sh
 COPY . .
-
-# Make port 7861 available to the world outside this container
 EXPOSE 7861
-
-# Define the command to run the application
-CMD ["python", "app.py"]
+ENTRYPOINT ["./entrypoint.sh"]

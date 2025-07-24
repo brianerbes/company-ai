@@ -47,4 +47,4 @@ def main_interface():
 if __name__ == "__main__":
     app = main_interface()
     # --- CAMBIO 2: Añadir share=True para crear un enlace público ---
-    app.launch(server_port=7861, share=True)
+    app.launch(server_port=7861, server_name="0.0.0.0")

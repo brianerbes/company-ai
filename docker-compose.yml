@@ -1,7 +1,3 @@
-# docker-compose.yml
-
-version: '3.8'
-
 services:
   company-ia:
     build: .
@@ -10,3 +6,5 @@ services:
     volumes:
       - ./virtual_fs:/app/virtual_fs
       - ./logs:/app/logs
+    # Mantiene el contenedor corriendo en segundo plano sin hacer nada
+    entrypoint: tail -f /dev/null
