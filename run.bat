@@ -1,5 +1,13 @@
 @echo off
-ECHO Activating virtual environment and starting Company-IA...
-CALL .\venv\Scripts\activate
-python main.py
+:: Forza al script a ejecutarse desde su propio directorio
+cd /d "%~dp0"
+
+ECHO Arrancando Company-IA con el intérprete de Python del venv...
+
+:: Establece la variable de entorno de idioma para Gradio
+set GRADIO_LANG=en
+
+:: Ejecuta la aplicación usando el ejecutable de Python del entorno virtual
+.\venv\Scripts\python.exe app.py
+
 pause
