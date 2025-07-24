@@ -8,23 +8,12 @@ AI workers in the organization.
 from config.prompts import AGENT_PROMPTS
 from config.communication_definitions import COMMUNICATION_DEFINITIONS
 
-
 class Agent:
     """
-    Represents a single AI agent in the company.
-
-    Each agent has a specific role and interacts with the system via the
-    Orchestrator. It is designed to be mostly stateless, relying on the
-    Orchestrator to manage history and communication flow.
+    Represents a single AI agent in the company. It processes tasks from its
+    inbox and formulates a response intent for the Orchestrator to execute.
     """
     def __init__(self, agent_id: str, orchestrator):
-        """
-        Initializes an Agent instance.
-
-        Args:
-            agent_id (str): The unique identifier for the agent (e.g., 'ceo').
-            orchestrator: An instance of the Orchestrator class to mediate communication.
-        """
         if agent_id not in AGENT_PROMPTS:
             raise ValueError(f"No role prompt defined for agent_id: {agent_id} in config/prompts.py")
 
@@ -34,95 +23,77 @@ class Agent:
         print(f"Agent '{self.agent_id}' created.")
 
     def __repr__(self) -> str:
-        """
-        Provides a developer-friendly string representation of the agent.
-        """
         return f"Agent(id='{self.agent_id}')"
 
-    def _determine_intent(self, task_prompt: str) -> str:
+    def execute_task(self, message: dict) -> dict | None:
         """
-        Uses the LLM to determine the primary intent of a given task.
-        """
-        print(f"[{self.agent_id}] Determining intent for task: '{task_prompt[:50]}...'")
-
-        # Create a list of possible intents from our config file
-        possible_intents = [
-            f"- {intent['name']}: {intent['description']}"
-            for intent in COMMUNICATION_DEFINITIONS['INTENT_DOMAIN']['primary_intents']
-        ]
-        intent_list_str = "\n".join(possible_intents)
-
-        prompt = f"""
-        Given the following task, which of these primary intents is most appropriate?
-        Respond with ONLY the name of the intent (e.g., ASSIGN_TASK).
-
-        Task: "{task_prompt}"
-
-        Possible Intents:
-        {intent_list_str}
-        """
-
-        # This is a simple, direct call to the LLM.
-        response = self.orchestrator.direct_llm_query(prompt)
-        # Clean up the response to get only the intent name
-        determined_intent = response.strip().upper()
-        print(f"[{self.agent_id}] Determined Intent: {determined_intent}")
-        return determined_intent
-
-    def execute_task(self, task_prompt: str) -> dict:
-        """
-        The main thinking loop for an agent. It determines intent, checks
-        knowledge, executes the core logic, and prepares a structured response.
+        The main thinking loop for an agent, executed when it processes a message
+        from its inbox.
 
         Args:
-            task_prompt (str): The plain text task assigned to the agent.
+            message (dict): The message object from the agent's inbox.
 
         Returns:
-            dict: A response message object to be routed by the Orchestrator.
+            A dictionary representing the agent's desired next action, or None.
         """
-        print(f"[{self.agent_id}] received task: '{task_prompt}'")
+        task_id = message.get("task_id")
+        task_prompt = message.get("payload", {}).get("description", "No description provided.")
+        print(f"[{self.agent_id}] is executing Task {task_id}: '{task_prompt[:60]}...'")
 
-        # 1. First, check the knowledge base for a direct answer.
-        # This saves on complex processing if the answer is already known.
+        # 1. Update task status to IN_PROGRESS
+        if task_id:
+            self.orchestrator.task_manager.update_task_status(task_id, 'IN_PROGRESS', self.agent_id)
+
+        # 2. Check the Knowledge Base first
         relevant_fact = self.orchestrator.knowledge_base.search_fact(task_prompt)
         if relevant_fact:
             print(f"[{self.agent_id}] Found relevant fact in Knowledge Base.")
+            # If fact is found, the task is to provide it.
+            if task_id:
+                self.orchestrator.task_manager.update_task_status(task_id, 'COMPLETED', self.agent_id)
             return {
                 "intent": "PROVIDE_INFORMATION",
-                "payload": {
-                    "EXECUTIVE_SUMMARY": "Answer found in knowledge base.",
-                    "DETAILS": relevant_fact,
-                    "POTENTIAL_IMPACT": "None. This is previously established information."
-                }
+                "payload": {"details": relevant_fact}
             }
 
-        # 2. If no fact is found, determine the core intent of the task.
-        intent = self._determine_intent(task_prompt)
+        # 3. Formulate the full prompt for the LLM to get a plan
+        # In a more advanced version, context injection would happen here.
+        # For now, we pass the main task prompt.
+        plan_prompt = f"""
+        Based on your role and the following task, what is your plan?
+        Your plan should be a sequence of intents. Choose from the available intents.
+        If you need to ask a question, your plan should be a single REQUEST_INFORMATION intent.
+        If you have the answer, your plan should be a single PROVIDE_INFORMATION intent with the details.
+        If you need to create and then write to a file, your plan can be [CREATE_FILE, WRITE_FILE].
 
-        # 3. Execute the main logic based on the determined intent.
-        # For now, we will simplify this. A more advanced version would have
-        # different logic paths for each intent. Here, we just assume the
-        # agent needs to think about the task.
-        print(f"[{self.agent_id}] Executing main logic for intent: {intent}")
-        history = self.orchestrator.get_history(self.agent_id)
-        llm_response = self.orchestrator.query_llm(self.agent_id, task_prompt, history)
+        TASK: "{task_prompt}"
+
+        AVAILABLE INTENTS: {[intent['name'] for intent in COMMUNICATION_DEFINITIONS['INTENT_DOMAIN']['primary_intents']]}
+
+        Provide only the final action or sequence of actions.
+        """
         
-        # 4. Analyze the LLM's response to formulate a final action.
-        if llm_response.strip().startswith("[QUESTION]"):
-            # If the agent needs more info, its final action is to escalate.
-            question_text = llm_response.strip().replace("[QUESTION]", "").strip()
+        # 4. Query the LLM for a plan
+        # We use a more direct query here that includes the role but not the whole history
+        raw_plan = self.orchestrator.query_llm(self.agent_id, plan_prompt)
+
+        # For now, we will assume the agent's response is the final information.
+        # A more complex system would parse the `raw_plan` and execute multiple intents.
+        print(f"[{self.agent_id}] LLM Response/Plan: '{raw_plan[:100]}...'")
+
+        # 5. Analyze the response and formulate a final action
+        if "[QUESTION]" in raw_plan.upper():
+            question = raw_plan.replace("[QUESTION]", "").strip()
             return {
                 "intent": "REQUEST_INFORMATION",
-                "payload": {"QUESTION": question_text}
+                "payload": {"QUESTION": question}
             }
         else:
-            # Otherwise, its final action is to provide the generated information.
-            self.orchestrator.add_to_history(self.agent_id, 'model', llm_response)
+            # If it's not a question, assume the task is complete for this turn.
+            if task_id:
+                self.orchestrator.task_manager.update_task_status(task_id, 'COMPLETED', self.agent_id)
+            
             return {
                 "intent": "PROVIDE_INFORMATION",
-                "payload": {
-                    "EXECUTIVE_SUMMARY": f"Completed task: {task_prompt[:30]}...",
-                    "DETAILS": llm_response,
-                    "POTENTIAL_IMPACT": "Varies based on content."
-                }
+                "payload": {"details": raw_plan}
             }
