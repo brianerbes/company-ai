@@ -1,10 +1,6 @@
 # core_logic/agent.py
 
-"""
-This file defines the Agent class, which is the blueprint for all individual
-AI workers in the organization.
-"""
-
+import json
 from config.prompts import AGENT_PROMPTS
 from config.communication_definitions import COMMUNICATION_DEFINITIONS
 
@@ -25,72 +21,72 @@ class Agent:
     def __repr__(self) -> str:
         return f"Agent(id='{self.agent_id}')"
 
-    def _determine_intent(self, task_prompt: str) -> str:
+    def execute_task(self, message: dict) -> dict:
         """
-        Uses the LLM to determine the primary intent of a given task.
-        """
-        print(f"[{self.agent_id}] Determining intent for task: '{task_prompt[:50]}...'")
-
-        possible_intents = [
-            f"- {intent['name']}: {intent['description']}"
-            for intent in COMMUNICATION_DEFINITIONS['INTENT_DOMAIN']['primary_intents']
-        ]
-        intent_list_str = "\n".join(possible_intents)
-
-        prompt = f"""
-        Given the following task, which of these primary intents is most appropriate?
-        Respond with ONLY the name of the intent (e.g., ASSIGN_TASK).
-
-        Task: "{task_prompt}"
-
-        Possible Intents:
-        {intent_list_str}
-        """
-        response = self.orchestrator.direct_llm_query(prompt)
-        determined_intent = response.strip().upper()
-        print(f"[{self.agent_id}] Determined Intent: {determined_intent}")
-        return determined_intent
-
-    def execute_task(self, message: dict) -> dict | None:
-        """
-        The main thinking loop for an agent, executed when it processes a message.
+        The main thinking loop for an agent. It formulates a plan and returns
+        the first actionable step for the Orchestrator.
         """
         task_id = message.get("task_id")
         task_prompt = message.get("payload", {}).get("description", "No description provided.")
-        print(f"[{self.agent_id}] is executing Task {task_id}: '{task_prompt[:60]}...'")
+        print(f"[{self.agent_id}] executing Task {task_id}: '{task_prompt[:60]}...'")
 
         if task_id:
             self.orchestrator.task_manager.update_task_status(task_id, 'IN_PROGRESS', self.agent_id)
 
-        relevant_fact = self.orchestrator.knowledge_base.search_fact(task_prompt)
-        if relevant_fact:
-            print(f"[{self.agent_id}] Found relevant fact in Knowledge Base.")
-            if task_id:
-                self.orchestrator.task_manager.update_task_status(task_id, 'COMPLETED', self.agent_id)
-            return {
-                "intent": "PROVIDE_INFORMATION",
-                "payload": {"details": relevant_fact}
-            }
+        # Formulate the prompt to get a structured plan from the LLM
+        possible_intents = [f"'{intent['name']}'" for intent in COMMUNICATION_DEFINITIONS['INTENT_DOMAIN']['primary_intents']]
         
-        # This is a simplified logic loop. A more advanced version would use the
-        # determined intent to choose different actions (e.g., use file system).
-        
-        # Query the LLM for a direct response to the task.
-        llm_response = self.orchestrator.query_llm_for_agent(self.agent_id, task_prompt)
-        print(f"[{self.agent_id}] LLM Response: '{llm_response[:100]}...'")
+        plan_prompt = f"""
+        You are an AI agent with the role: {self.role_prompt}
+        Your task is: "{task_prompt}"
 
-        # Analyze the response and formulate a final action
-        if "[QUESTION]" in llm_response.upper():
-            question = llm_response.replace("[QUESTION]", "").strip()
-            return {
-                "intent": "REQUEST_INFORMATION",
-                "payload": {"QUESTION": question}
-            }
-        else:
-            if task_id:
-                self.orchestrator.task_manager.update_task_status(task_id, 'COMPLETED', self.agent_id)
-            
-            return {
+        Based on your task, determine the single most appropriate next action (intent) to take.
+        Your available intents are: {', '.join(possible_intents)}.
+
+        Respond in a JSON format with two keys:
+        1. "intent": The name of the intent you have chosen.
+        2. "payload": A dictionary containing the necessary data for that intent.
+           - For PROVIDE_INFORMATION, the payload should be {{"details": "your full response here"}}.
+           - For REQUEST_INFORMATION, the payload should be {{"QUESTION": "your specific question here"}}.
+           - For CREATE_FILE, the payload should be {{"filename": "path/to/file.txt"}}.
+           - For WRITE_FILE, the payload should be {{"filename": "path/to/file.txt", "content": "the content to write"}}.
+
+        Example:
+        If the task is "Write a summary of our goals to goals.txt", your response should be:
+        {{
+            "intent": "WRITE_FILE",
+            "payload": {{
+                "filename": "goals.txt",
+                "content": "Our main goal is to deliver a high-quality product..."
+            }}
+        }}
+
+        Now, provide the JSON for your task.
+        """
+        
+        # Query the LLM for a structured plan
+        raw_response = self.orchestrator.direct_llm_query(plan_prompt)
+        print(f"[{self.agent_id}] LLM Raw Response: '{raw_response[:150]}...'")
+
+        # Parse the JSON response from the LLM
+        try:
+            # Clean up the response to ensure it's valid JSON
+            json_response_str = raw_response.strip().replace("```json", "").replace("```", "")
+            action = json.loads(json_response_str)
+        except json.JSONDecodeError:
+            print(f"[{self.agent_id}] ERROR: Failed to decode LLM response into JSON. Defaulting to PROVIDE_INFORMATION.")
+            # Fallback for when the LLM doesn't respond with valid JSON
+            action = {
                 "intent": "PROVIDE_INFORMATION",
-                "payload": {"details": llm_response}
+                "payload": {"details": raw_response}
             }
+
+        # Add the task_id to the final action for tracking
+        action['task_id'] = task_id
+        
+        # If the task is considered complete by this action, update the status.
+        if action['intent'] in ["PROVIDE_INFORMATION", "REQUEST_INFORMATION"]:
+             if task_id:
+                self.orchestrator.task_manager.update_task_status(task_id, 'COMPLETED', self.agent_id)
+        
+        return action
