@@ -1,47 +1,8 @@
-import os
-import json
 from pathlib import Path
+from core.company import Company, discover_companies
 
 # Define the root path of the workspace where all companies are stored.
 WORKSPACE_ROOT = Path(__file__).parent / "workspace"
-
-def discover_companies(workspace_path: Path) -> list[dict]:
-    """
-    Scans the workspace directory for valid company folders.
-
-    A company is considered valid if it's a directory containing a 'manifest.json' file.
-
-    Args:
-        workspace_path: The path to the workspace directory.
-
-    Returns:
-        A list of dictionaries, where each dictionary is a parsed manifest.json.
-        Returns an empty list if the workspace doesn't exist or contains no companies.
-    """
-    discovered_companies = []
-    if not workspace_path.is_dir():
-        print(f"Workspace directory not found at: {workspace_path}")
-        return discovered_companies
-
-    for company_dir in workspace_path.iterdir():
-        if not company_dir.is_dir():
-            continue
-
-        manifest_path = company_dir / "manifest.json"
-        if manifest_path.is_file():
-            print(f"Found potential company: '{company_dir.name}'")
-            try:
-                with open(manifest_path, 'r', encoding='utf-8') as f:
-                    manifest_data = json.load(f)
-                    # We can add more validation here later
-                    discovered_companies.append(manifest_data)
-                    print(f"  -> Successfully loaded manifest for '{manifest_data['identity']['name']}'.")
-            except json.JSONDecodeError:
-                print(f"  -> ERROR: Could not parse manifest.json for '{company_dir.name}'.")
-            except KeyError:
-                print(f"  -> ERROR: Manifest for '{company_dir.name}' is missing required keys.")
-        
-    return discovered_companies
 
 def main():
     """
@@ -49,19 +10,34 @@ def main():
     """
     print("CompanIA application starting...")
     print("-" * 20)
+    
+    # 1. Discover available companies
     print("Discovering companies in workspace...")
+    company_manifests = discover_companies(WORKSPACE_ROOT)
     
-    companies = discover_companies(WORKSPACE_ROOT)
-    
-    print("-" * 20)
-    if not companies:
+    if not company_manifests:
         print("No valid companies found. Please create a company folder with a valid manifest.json.")
-    else:
-        print(f"Found {len(companies)} company/companies:")
-        for company_data in companies:
-            print(f" - {company_data['identity']['name']}")
+        return
+
+    print(f"Found {len(company_manifests)} company/companies:")
+    for i, manifest in enumerate(company_manifests):
+        print(f"  [{i+1}] {manifest['identity']['name']}")
     print("-" * 20)
 
+    # 2. Select a company (for now, we'll auto-select the first one)
+    # In the future, this will be a user input prompt.
+    selected_manifest = company_manifests[0]
+    print(f"Loading selected company: '{selected_manifest['identity']['name']}'...")
+    
+    # 3. Load the company into a dedicated object
+    active_company = Company(selected_manifest)
+    
+    print("Company loaded successfully.")
+    print("-" * 20)
+    active_company.print_summary()
+    print("-" * 20)
+    
+    # The main application loop will start here in the future...
 
 if __name__ == "__main__":
     main()
