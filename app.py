@@ -23,34 +23,44 @@ def main():
 
     # 2. Create the initial, high-level task for the CTO
     cto_id = "agent_id_cto_001"
-    if cto_id in active_company.agents:
-        task_description = "Oversee the creation of the technical specification for the new 'Dynamic Task Graph' feature. You must delegate the detailed work to your team, such as the API design to the Lead Programmer and the database schema to the Database Architect. You will then assemble their work into the final document."
+    if cto_id in active_company.agents and not active_company.tasks:
+        task_description = "Oversee the creation of the technical specification for the new 'Dynamic Task Graph' feature. You must delegate the detailed work to your team and block your own task until they are complete. You will then assemble their work into the final document."
         active_company.create_task(description=task_description, assignee_id=cto_id)
     
     # 3. Main Scheduler Loop
     print("\n--- Starting Main Scheduler Loop ---")
-    MAX_SCHEDULER_CYCLES = 5 # Prevent infinite loops
+    MAX_SCHEDULER_CYCLES = 10 # Increase cycles for multi-step processes
     cycles = 0
     while cycles < MAX_SCHEDULER_CYCLES:
+        cycles += 1
+        print(f"\n{'='*15} Scheduler Cycle {cycles} {'='*15}")
+        
+        # 1. Un-block tasks whose dependencies are complete
+        print("Checking for completed dependencies...")
+        for task in active_company.tasks.values():
+            if task.status == TaskStatus.BLOCKED:
+                deps_ids = task.dependencies
+                # Check if all dependencies are complete
+                if all(active_company.tasks.get(dep_id).status == TaskStatus.COMPLETED for dep_id in deps_ids):
+                    task.set_status(TaskStatus.PENDING, f"All dependencies ({len(deps_ids)}) are complete.")
+
+        # 2. Find and execute runnable tasks
         runnable_tasks = [t for t in active_company.tasks.values() if t.status == TaskStatus.PENDING]
         
         if not runnable_tasks:
-            print("No runnable tasks found. Shutting down scheduler.")
-            break
-            
-        print(f"\n[Scheduler Cycle {cycles+1}] Found {len(runnable_tasks)} runnable task(s).")
-        
-        # Process tasks one by one
+            print("No runnable tasks found in this cycle.")
+            # Check if all tasks are done
+            if all(t.status in [TaskStatus.COMPLETED, TaskStatus.FAILED] for t in active_company.tasks.values()):
+                print("All tasks are completed or failed. Shutting down scheduler.")
+                break
+
+        print(f"Found {len(runnable_tasks)} runnable task(s).")
         for task in runnable_tasks:
             agent = active_company.agents.get(task.assignee_id)
             if agent:
                 agent.process_task(task)
             else:
                 task.set_status(TaskStatus.FAILED, f"Assignee '{task.assignee_id}' not found.")
-        
-        cycles += 1
-
-    print("\n--- Scheduler Finished ---")
     print("Final Task Statuses:")
     for task in active_company.tasks.values():
         print(f"  - Task {task.task_id[:8]}: {task.status.value}")

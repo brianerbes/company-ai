@@ -1,0 +1,54 @@
+-- Database Schema for Dynamic Task Graph
+
+-- Tables:
+
+-- 1. Tasks Table
+CREATE TABLE Tasks (
+    task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_name VARCHAR(255) NOT NULL,
+    task_type VARCHAR(50),
+    status VARCHAR(50) CHECK (status IN ('pending', 'in_progress', 'completed', 'failed')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Dependencies Table
+CREATE TABLE Dependencies (
+    dependency_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_task_id INTEGER,
+    child_task_id INTEGER,
+    FOREIGN KEY (parent_task_id) REFERENCES Tasks(task_id),
+    FOREIGN KEY (child_task_id) REFERENCES Tasks(task_id)
+);
+
+-- 3. Task Data Table (for storing task-specific data)
+CREATE TABLE TaskData (
+    data_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER,
+    key VARCHAR(255),
+    value TEXT,
+    FOREIGN KEY (task_id) REFERENCES Tasks(task_id)
+);
+
+-- Indexes:
+CREATE INDEX idx_tasks_status ON Tasks (status);
+CREATE INDEX idx_dependencies_parent ON Dependencies (parent_task_id);
+CREATE INDEX idx_dependencies_child ON Dependencies (child_task_id);
+
+-- Query Optimization Strategies:
+-- Use appropriate indexes for joins and filtering.
+-- Optimize queries with appropriate `WHERE` clauses.
+-- Consider using views for frequently accessed data subsets.
+-- Use stored procedures for complex operations.
+
+-- Interactions (CRUD):
+-- Create Task: INSERT INTO Tasks (...)
+-- Read Task: SELECT * FROM Tasks WHERE task_id = ...
+-- Update Task: UPDATE Tasks SET ... WHERE task_id = ...
+-- Delete Task: DELETE FROM Tasks WHERE task_id = ...
+-- Add Dependency: INSERT INTO Dependencies (...)
+-- Remove Dependency: DELETE FROM Dependencies WHERE ...
+-- Get Task Dependencies: SELECT * FROM Dependencies WHERE parent_task_id = ... or child_task_id = ...
+-- Get Task Data: SELECT * FROM TaskData WHERE task_id = ...
+
+--Further schema refinement and interaction details will be added after consultation with CTO and Lead Programmer.

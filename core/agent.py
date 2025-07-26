@@ -30,7 +30,7 @@ class Agent:
             "CREATE_FILE": "Creates a new, empty file. Payload requires a 'path'.",
             "WRITE_FILE": "Writes or appends content to a file. Payload requires 'path' and 'content'. To append, include 'append': true in the payload.",
             "READ_FILE": "Reads the content of a file. Payload requires a 'path'.",
-            "DELEGATE_TASK": "Delegates a new task to another agent. Payload requires 'assignee_id' and 'description'."
+            "DELEGATE_TASK": "Delegates a new task to another agent. Payload requires 'assignee_id' and 'description'. To wait for the result, also include 'block_self': true."
         }
         available_tools = self.meta.get('capabilities', {}).get('allowed_tools', [])
         manifest = "Your available tools and their required parameters are:\n"
@@ -201,7 +201,8 @@ class Agent:
             # === 2. EXECUTE PHASE ===
             print("\n--- Phase 2: Execution ---")
             actions = plan.get('actions', [])
-            execution_results = execute_actions(actions, self.company) if actions else []
+            # Pass the company object AND the current task to the orchestrator
+            execution_results = execute_actions(actions, self.company, task) if actions else []
 
             # === 3. REFLECT PHASE ===
             print("\n--- Phase 3: Reflection ---")

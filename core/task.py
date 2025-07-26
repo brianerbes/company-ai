@@ -5,29 +5,28 @@ from enum import Enum
 from datetime import datetime
 
 class TaskStatus(Enum):
-    """Defines the possible states of a Task."""
     PENDING = "PENDING"
-    READY = "READY"
+    READY = "READY"  # Kept for future, more advanced scheduling
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
-    BLOCKED = "BLOCKED"
+    BLOCKED = "BLOCKED" # A task is waiting on dependencies
 
 class Task:
-    """
-    Represents a single, self-contained unit of work in the system.
-
-    This object tracks the entire lifecycle of an assignment, including its
-    dependencies, status, and history.
-    """
-    def __init__(self, description: str, assignee_id: str, delegator_id: str = "OWNER"):
+    def __init__(self, description: str, assignee_id: str, delegator_id: str = "OWNER", dependencies: list[str] = None):
         self.task_id: str = str(uuid.uuid4())
         self.description: str = description
         self.assignee_id: str = assignee_id
         self.delegator_id: str = delegator_id
         
+        # A list of task_ids that must be COMPLETED before this task can run
+        self.dependencies: list[str] = dependencies if dependencies is not None else []
+        
         self.status: TaskStatus = TaskStatus.PENDING
-        self.dependencies: list[str] = []
+        # If a task starts with dependencies, it should immediately be blocked.
+        if self.dependencies:
+            self.status = TaskStatus.BLOCKED
+
         self.context_pointers: list[str] = []
         
         self.outcome: dict | None = None

@@ -1,9 +1,10 @@
 from typing import TYPE_CHECKING
 from .vfs import FileSystemManager
+from .task import Task, TaskStatus # Import TaskStatus
 
-# This import now only runs for type-checking, not at runtime, breaking the cycle.
 if TYPE_CHECKING:
     from .company import Company 
+    from .task import Task
 
 # --- Tool Implementations ---
 
@@ -30,16 +31,24 @@ def read_file(fs: FileSystemManager, payload: dict):
     return {"status": "success", "content": content}
 
 # Note the forward reference string "Company" in the type hint
-def delegate_task(company: "Company", payload: dict):
-    """Tool to delegate a new task to another agent."""
+def delegate_task(company: "Company", current_task: "Task", payload: dict):
+    """Tool to delegate a new task and optionally block the current task."""
     assignee_id = payload.get("assignee_id")
     description = payload.get("description")
+    block_self = payload.get("block_self", False) # New optional flag
 
     if not assignee_id or not description:
         return {"status": "error", "message": "Payload must include 'assignee_id' and 'description'."}
     
     try:
         new_task = company.create_task(description=description, assignee_id=assignee_id)
+        
+        if block_self:
+            # Add the new task as a dependency for the current task
+            current_task.dependencies.append(new_task.task_id)
+            current_task.set_status(TaskStatus.BLOCKED, f"Blocked pending completion of sub-task {new_task.task_id[:8]}")
+            return {"status": "success", "message": f"Task '{new_task.task_id}' delegated to '{assignee_id}'. Current task is now BLOCKED."}
+
         return {"status": "success", "message": f"Task '{new_task.task_id}' delegated to '{assignee_id}'."}
     except ValueError as e:
         return {"status": "error", "message": str(e)}
@@ -53,8 +62,8 @@ TOOL_REGISTRY = {
 }
 
 # --- Orchestrator Execution Engine ---
-def execute_actions(actions: list, company: "Company"):
-    """Executes actions, now passing the company instance to tools."""
+def execute_actions(actions: list, company: "Company", current_task: "Task"):
+    """Executes actions, passing the company and current_task to tools."""
     print("\n--- Orchestrator is executing actions ---")
     execution_results = []
     for i, action in enumerate(actions):
@@ -69,7 +78,8 @@ def execute_actions(actions: list, company: "Company"):
         else:
             try:
                 if tool_name == "DELEGATE_TASK":
-                    result = tool_function(company, payload)
+                    # The delegate tool now needs the current_task as well
+                    result = tool_function(company, current_task, payload)
                 else:
                     result = tool_function(company.fs, payload)
             except Exception as e:
