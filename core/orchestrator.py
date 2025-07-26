@@ -1,3 +1,4 @@
+import json
 from typing import TYPE_CHECKING
 from .vfs import FileSystemManager
 from .task import Task, TaskStatus # Import TaskStatus
@@ -117,12 +118,22 @@ def execute_actions(actions: list, company: "Company", current_task: "Task"):
             except Exception as e:
                 result = {"status": "fatal_error", "message": str(e)}
 
-        log_result = result.copy()
-        if 'content' in log_result and len(log_result.get('content', '')) > 100:
-            log_result['content'] = log_result['content'][:100] + '... (truncated)'
-        print(f"  -> Result: {log_result}")
-        execution_results.append(result)
-        if result.get("status") == "fatal_error": break
+        # Robust logging that handles any result, including None, without crashing.
+        if result is None:
+            log_message = "None (Error: Tool function returned no result)"
+            execution_results.append({"status": "error", "message": log_message})
+        else:
+            execution_results.append(result)
+            # Convert result to string and truncate if too long for clean logs
+            log_message = json.dumps(result)
+            if len(log_message) > 200:
+                log_message = log_message[:200] + "... (truncated)"
+        
+        print(f"  -> Result: {log_message}")
+        
+        # Stop execution if a fatal error occurred
+        if isinstance(result, dict) and result.get("status") == "fatal_error":
+            break
             
     print("--- Orchestrator finished ---")
     return execution_results

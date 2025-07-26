@@ -1,3 +1,3 @@
 # MOCK FINAL SPECIFICATION
 
-This document combines the work of the team.
+Assembled by the CTO.
