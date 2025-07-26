@@ -1,45 +1,28 @@
-# core/orchestrator.py
-
 from .vfs import FileSystemManager
 
 # --- Tool Implementations ---
-# Each tool is a function that takes the company's VFS and a payload.
-# This ensures all actions are sandboxed.
 
 def create_file(fs: FileSystemManager, payload: dict):
-    """Tool to create an empty file."""
     path = payload.get("path") or payload.get("filepath")
-    if not path:
-        return {"status": "error", "message": "Payload must include 'path'."}
-    
-    # Writing an empty string creates the file.
+    if not path: return {"status": "error", "message": "Payload must include 'path'."}
     fs.write_file(path, "")
     return {"status": "success", "message": f"File created at '{path}'."}
 
 def write_file(fs: FileSystemManager, payload: dict):
-    """Tool to write content to a file."""
     path = payload.get("path") or payload.get("filepath")
     content = payload.get("content")
-    if not path or content is None:
-        return {"status": "error", "message": "Payload must include 'path' and 'content'."}
-    
+    if not path or content is None: return {"status": "error", "message": "Payload must include 'path' and 'content'."}
     fs.write_file(path, content, append=False)
     return {"status": "success", "message": f"Content written to '{path}'."}
 
 def read_file(fs: FileSystemManager, payload: dict):
-    """Tool to read the content of a file."""
     path = payload.get("path") or payload.get("filepath")
-    if not path:
-        return {"status": "error", "message": "Payload must include 'path'."}
-        
+    if not path: return {"status": "error", "message": "Payload must include 'path'."}
     content = fs.read_file(path)
-    if content is None:
-        return {"status": "error", "message": f"File not found at '{path}'."}
+    if content is None: return {"status": "error", "message": f"File not found at '{path}'."}
     return {"status": "success", "content": content}
 
 # --- Tool Registry ---
-# This dictionary maps the tool names (as strings) to their functions.
-# The Orchestrator uses this to find the correct tool to execute.
 
 TOOL_REGISTRY = {
     "CREATE_FILE": create_file,
@@ -49,15 +32,12 @@ TOOL_REGISTRY = {
 
 # --- Orchestrator Execution Engine ---
 
-def execute_actions(actions: list, fs: FileSystemManager):
+def execute_actions(actions: list, fs: FileSystemManager) -> list:
     """
-    Iterates through a list of actions and executes them using the tool registry.
-
-    Args:
-        actions: The list of action objects from the agent's plan.
-        fs: The sandboxed FileSystemManager for the current company.
+    Executes a list of actions and returns the results of each execution.
     """
     print("\n--- Orchestrator is executing actions ---")
+    execution_results = []
     for i, action in enumerate(actions):
         tool_name = action.get("tool_name")
         payload = action.get("payload", {})
@@ -67,15 +47,24 @@ def execute_actions(actions: list, fs: FileSystemManager):
         tool_function = TOOL_REGISTRY.get(tool_name)
         
         if not tool_function:
-            print(f"  -> ERROR: Tool '{tool_name}' not found in registry. Skipping.")
-            continue
-            
-        try:
-            result = tool_function(fs, payload)
-            print(f"  -> Result: {result.get('message') or result.get('status')}")
-            # In the future, we would handle errors and potentially stop execution.
-        except Exception as e:
-            print(f"  -> FATAL ERROR executing tool '{tool_name}': {e}")
-            # Stop execution on fatal error
+            result = {"status": "error", "message": f"Tool '{tool_name}' not found in registry."}
+            print(f"  -> Result: {result['message']}")
+        else:
+            try:
+                result = tool_function(fs, payload)
+                # Omit large content from logs for readability
+                log_result = result.copy()
+                if 'content' in log_result and len(log_result['content']) > 100:
+                    log_result['content'] = log_result['content'][:100] + '... (truncated)'
+                print(f"  -> Result: {log_result}")
+            except Exception as e:
+                result = {"status": "fatal_error", "message": str(e)}
+                print(f"  -> FATAL ERROR executing tool '{tool_name}': {e}")
+        
+        execution_results.append(result)
+        # Stop execution if a fatal error occurred
+        if result.get("status") == "fatal_error":
             break
+            
     print("--- Orchestrator finished ---")
+    return execution_results
