@@ -205,8 +205,12 @@ class Agent:
             # === 2. EXECUTE PHASE ===
             print("\n--- Phase 2: Execution ---")
             actions = plan.get('actions', [])
-            # Pass the company object AND the current task to the orchestrator
             execution_results = execute_actions(actions, self.company, task) if actions else []
+
+            # If the task was blocked by a tool (like DELEGATE_TASK), the agent's turn is over.
+            if task.status == TaskStatus.BLOCKED:
+                print(f"Agent '{self.role}' task is now BLOCKED, ending turn.")
+                return # Exit the process_task method immediately
 
             # === 3. REFLECT PHASE ===
             print("\n--- Phase 3: Reflection ---")

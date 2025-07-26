@@ -67,6 +67,10 @@ MOCK_RESPONSES = {
             {"tool_name": "WRITE_FILE", "payload": {"path": "docs/final_spec.md", "content": "# MOCK FINAL SPECIFICATION\n\nThis document combines the work of the team."}}
         ]
     },
+    "reflection_incomplete_delegated": {
+        "critique": "MOCK: I have successfully delegated the sub-tasks for the API and database design. My own work is now blocked pending their completion. The task is therefore not complete.",
+        "is_complete": False
+    },
     "reflection_complete": {
         "critique": "MOCK: The execution was flawless and the results perfectly match the plan. The task is fully complete.",
         "is_complete": True
@@ -80,18 +84,24 @@ def _get_mock_response(prompt: str) -> str:
     print("  -> MOCK MODE: Generating mock response...")
     prompt_lower = prompt.lower()
     
-    # Reflection phase is always successful for now
-    if "reflect on your work" in prompt_lower:
-        return json.dumps(MOCK_RESPONSES["reflection_complete"])
-    
     # Use the unique system prompt text to identify the agent and its task
     if "you are the chief technology officer" in prompt_lower:
-        # Check if the CTO is in the iteration phase to assemble the work
+        if "reflect on your work" in prompt_lower:
+            # If the CTO just delegated, the critique should say it's incomplete
+            if any("delegate_task" in str(action).lower() for action in prompt.split("actions")[1]):
+                return json.dumps(MOCK_RESPONSES["reflection_incomplete_delegated"])
+            else: # Otherwise, the final assembly is complete
+                 return json.dumps(MOCK_RESPONSES["reflection_complete"])
+
         if "review your previous attempts" in prompt_lower:
             return json.dumps(MOCK_RESPONSES["cto_plan_assemble"])
         else:
             return json.dumps(MOCK_RESPONSES["cto_plan_delegate"])
             
+    # For other agents, the reflection is always complete for now
+    elif "reflect on your work" in prompt_lower:
+        return json.dumps(MOCK_RESPONSES["reflection_complete"])
+        
     elif "you are the lead programmer" in prompt_lower:
         return json.dumps(MOCK_RESPONSES["programmer_plan"])
         
@@ -101,8 +111,11 @@ def _get_mock_response(prompt: str) -> str:
     # Default fallback if no specific prompt is matched
     return json.dumps(MOCK_RESPONSES["reflection_complete"])
 
-# --- Main API Function (is unchanged) ---
+# --- Main API Function ---
 def generate_structured_response(prompt: str) -> str | None:
+    """
+    Main function to get a response. Switches between real and mock mode.
+    """
     if MOCK_MODE:
         return _get_mock_response(prompt)
 
