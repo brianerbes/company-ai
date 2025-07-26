@@ -53,13 +53,25 @@ def delegate_task(company: "Company", current_task: "Task", payload: dict):
     except ValueError as e:
         return {"status": "error", "message": str(e)}
 
+def list_files(fs: FileSystemManager, payload: dict):
+    """Tool to list files and directories at a given path."""
+    path = payload.get("path", ".") # Default to current directory
+    
+    try:
+        file_list = fs.list_files(path)
+        return {"status": "success", "files": file_list}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 # --- Tool Registry ---
 TOOL_REGISTRY = {
     "CREATE_FILE": create_file,
     "WRITE_FILE": write_file,
     "READ_FILE": read_file,
     "DELEGATE_TASK": delegate_task,
+    "LIST_FILES": list_files, 
 }
+
 
 # --- Orchestrator Execution Engine ---
 def execute_actions(actions: list, company: "Company", current_task: "Task"):

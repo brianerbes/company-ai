@@ -30,6 +30,7 @@ class Agent:
             "CREATE_FILE": "Creates a new, empty file. Payload requires a 'path'.",
             "WRITE_FILE": "Writes or appends content to a file. Payload requires 'path' and 'content'. To append, include 'append': true in the payload.",
             "READ_FILE": "Reads the content of a file. Payload requires a 'path'.",
+            "LIST_FILES": "Lists files in a directory. Payload can optionally include a 'path', defaults to the company root.",
             "DELEGATE_TASK": "Delegates a new task to another agent. Payload requires 'assignee_id' and 'description'. To wait for the result, also include 'block_self': true."
         }
         available_tools = self.meta.get('capabilities', {}).get('allowed_tools', [])
