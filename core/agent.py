@@ -1,15 +1,20 @@
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 from .vfs import FileSystemManager
 from .task import Task, TaskStatus
 from .llm_api import generate_structured_response
 from .orchestrator import execute_actions
 
+if TYPE_CHECKING:
+    from .company import Company
+
 class Agent:
-    def __init__(self, agent_id: str, agent_meta: dict, company_fs: FileSystemManager):
+    def __init__(self, agent_id: str, agent_meta: dict, company: "Company"):
         self.id = agent_id
         self.meta = agent_meta
-        self.fs = company_fs
+        self.company = company
+        self.fs = company.fs
         self.role = self.meta.get('role', 'Generic Agent')
         self.system_prompt = self.meta.get('system_prompt', 'You are a helpful assistant.')
     
@@ -21,16 +26,12 @@ class Agent:
         print(f"    Role: {self.role}")
         
     def _get_tool_manifest(self) -> str:
-        """
-        Creates a detailed string manifest of available tools and their parameters.
-        """
         tool_descriptions = {
             "CREATE_FILE": "Creates a new, empty file. Payload requires a 'path'.",
             "WRITE_FILE": "Writes or appends content to a file. Payload requires 'path' and 'content'. To append, include 'append': true in the payload.",
             "READ_FILE": "Reads the content of a file. Payload requires a 'path'.",
             "DELEGATE_TASK": "Delegates a new task to another agent. Payload requires 'assignee_id' and 'description'."
         }
-        
         available_tools = self.meta.get('capabilities', {}).get('allowed_tools', [])
         manifest = "Your available tools and their required parameters are:\n"
         for tool_name in available_tools:
@@ -38,7 +39,19 @@ class Agent:
             manifest += f"- {tool_name}: {description}\n"
         return manifest
 
+    def _get_team_roster(self) -> str:
+        """Builds a string listing available team members for delegation."""
+        roster = "You can delegate to the following team members (use their agent_id):\n"
+        if not self.company.agents or len(self.company.agents) <= 1:
+            return "There are no other agents available for delegation.\n"
+
+        for agent_id, agent in self.company.agents.items():
+            if agent_id != self.id:
+                roster += f"- {agent.id}: {agent.role}\n"
+        return roster
+
     def _construct_initial_prompt(self, task: Task) -> str:
+        """Constructs the first prompt for a task."""
         said_format = """
         {
           "reasoning": "A brief, step-by-step thought process for how you will approach the task. Explain your plan.",
@@ -53,6 +66,8 @@ class Agent:
         }
         """
         tool_manifest = self._get_tool_manifest()
+        team_roster = self._get_team_roster()
+
         prompt = f"""
         You are an AI agent. Do not act as a user.
         
@@ -63,14 +78,16 @@ class Agent:
         "{task.description}"
 
         {tool_manifest}
+        {team_roster}
 
-        Based on your identity and the task, you must formulate a plan.
+        Based on all the information above, you must formulate a plan.
         Your response MUST be a valid JSON object following this exact structure (do NOT output any other text, just the JSON):
         {said_format}
         """
         return prompt
 
     def _construct_iteration_prompt(self, task: Task, previous_attempts: list) -> str:
+        """Constructs a prompt for a subsequent iteration."""
         said_format = """
         {
           "reasoning": "A new, improved reasoning for how you will address the critiques from your last attempt.",
@@ -85,6 +102,7 @@ class Agent:
         }
         """
         tool_manifest = self._get_tool_manifest()
+        team_roster = self._get_team_roster()
         history = ""
         for i, attempt in enumerate(previous_attempts):
             history += f"\n--- Attempt #{i+1} ---\n"
@@ -106,9 +124,10 @@ class Agent:
         Review your previous attempts:
         {history}
 
-        Based on your critique of what went wrong, create a new plan to fully complete the task.
+        Based on your critique, create a new plan.
         
         {tool_manifest}
+        {team_roster}
         
         Your new response MUST be a valid JSON object following this exact structure:
         {said_format}
@@ -147,6 +166,7 @@ class Agent:
         return prompt
 
     def process_task(self, task: Task):
+        """Processes a task with a Plan -> Execute -> Reflect -> Iterate loop."""
         print(f"\nAgent '{self.role}' is processing Task {task.task_id}...")
         
         max_iterations = 3
@@ -181,7 +201,7 @@ class Agent:
             # === 2. EXECUTE PHASE ===
             print("\n--- Phase 2: Execution ---")
             actions = plan.get('actions', [])
-            execution_results = execute_actions(actions, self.fs) if actions else []
+            execution_results = execute_actions(actions, self.company) if actions else []
 
             # === 3. REFLECT PHASE ===
             print("\n--- Phase 3: Reflection ---")

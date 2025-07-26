@@ -52,7 +52,7 @@ class Company:
                     agent_meta = json.loads(meta_content_str)
                     agent_id = agent_meta.get('agent_id')
                     if agent_id:
-                        agent = Agent(agent_id, agent_meta, self.fs)
+                        agent = Agent(agent_id, agent_meta, self) 
                         self.agents[agent_id] = agent
                         print(f"  -> Successfully loaded agent: {agent.role}")
                 except json.JSONDecodeError:
