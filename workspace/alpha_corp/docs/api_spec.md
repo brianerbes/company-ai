@@ -1,5 +1,4 @@
-# API Specification
+# MOCK API Specification
 
-## Endpoints
 - POST /tasks
 - GET /tasks/{id}

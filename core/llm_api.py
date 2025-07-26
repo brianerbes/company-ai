@@ -8,19 +8,23 @@ from dotenv import load_dotenv
 load_dotenv()
 MOCK_MODE = os.getenv("MOCK_MODE", "False").lower() in ('true', '1', 't')
 
-# Configure the real API client only if not in mock mode
+print(f"--- MOCK MODE status: {MOCK_MODE} ---")
+
 if not MOCK_MODE:
+    print("--- Configuring REAL Gemini API client ---")
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY not found. Please set it in your .env file.")
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    print("--- Mock mode is active. Real API will not be used. ---")
+
 
 # --- Mock Responses ---
-# A library of pre-written responses for different agents and phases.
 MOCK_RESPONSES = {
-    "cto_plan": {
-        "reasoning": "As the CTO, my first step is to delegate the detailed work to my specialized team members. I will assign the API design to the Lead Programmer and the database schema to the Database Architect. My own task will then be blocked until they complete their work.",
+    "cto_plan_delegate": {
+        "reasoning": "MOCK: As the CTO, my first step is to delegate the detailed work to my specialized team members. I will assign the API design to the Lead Programmer and the database schema to the Database Architect. My own task will then be blocked until they complete their work.",
         "actions": [
             {
                 "tool_name": "DELEGATE_TASK",
@@ -41,53 +45,64 @@ MOCK_RESPONSES = {
         ]
     },
     "programmer_plan": {
-        "reasoning": "My task is to design and document the API. I will create the file and write a detailed specification for all necessary endpoints, including data structures and error codes.",
+        "reasoning": "MOCK: My task is to design and document the API. I will create the file and write a detailed specification for all necessary endpoints.",
         "actions": [
             {"tool_name": "CREATE_FILE", "payload": {"path": "docs/api_spec.md"}},
-            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/api_spec.md", "content": "# API Specification\n\n## Endpoints\n- POST /tasks\n- GET /tasks/{id}\n"}}
+            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/api_spec.md", "content": "# MOCK API Specification\n\n- POST /tasks\n- GET /tasks/{id}\n"}}
         ]
     },
     "dba_plan": {
-        "reasoning": "My task is to design the database schema. I will create a file and write the schema using SQL DDL, including tables for tasks and dependencies.",
+        "reasoning": "MOCK: My task is to design the database schema. I will create a file and write the schema using SQL DDL.",
         "actions": [
             {"tool_name": "CREATE_FILE", "payload": {"path": "docs/db_schema.md"}},
-            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/db_schema.md", "content": "-- Database Schema\n\nCREATE TABLE tasks (...);\n"}}
+            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/db_schema.md", "content": "-- MOCK Database Schema\n\nCREATE TABLE tasks (...);\n"}}
+        ]
+    },
+    "cto_plan_assemble": {
+        "reasoning": "MOCK: My team has completed their work, and my task is now unblocked. I will read their files and assemble the final specification.",
+        "actions": [
+            {"tool_name": "READ_FILE", "payload": {"path": "docs/api_spec.md"}},
+            {"tool_name": "READ_FILE", "payload": {"path": "docs/db_schema.md"}},
+            {"tool_name": "CREATE_FILE", "payload": {"path": "docs/final_spec.md"}},
+            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/final_spec.md", "content": "# MOCK FINAL SPECIFICATION\n\nThis document combines the work of the team."}}
         ]
     },
     "reflection_complete": {
-        "critique": "The execution was flawless and the results perfectly match the plan. The task is fully complete to a professional standard.",
+        "critique": "MOCK: The execution was flawless and the results perfectly match the plan. The task is fully complete.",
         "is_complete": True
     }
 }
 
 def _get_mock_response(prompt: str) -> str:
     """
-    Selects an appropriate mock response based on keywords in the prompt.
-    This simulates different agents having different thoughts.
+    Selects an appropriate mock response based on more specific keywords in the prompt.
     """
     print("  -> MOCK MODE: Generating mock response...")
-    prompt = prompt.lower()
+    prompt_lower = prompt.lower()
     
-    # All reflection phases will be successful for now
-    if "reflect on your work" in prompt:
+    # Reflection phase is always successful for now
+    if "reflect on your work" in prompt_lower:
         return json.dumps(MOCK_RESPONSES["reflection_complete"])
     
-    # Planning phases for different agents
-    if "lead programmer" in prompt:
+    # Use the unique system prompt text to identify the agent and its task
+    if "you are the chief technology officer" in prompt_lower:
+        # Check if the CTO is in the iteration phase to assemble the work
+        if "review your previous attempts" in prompt_lower:
+            return json.dumps(MOCK_RESPONSES["cto_plan_assemble"])
+        else:
+            return json.dumps(MOCK_RESPONSES["cto_plan_delegate"])
+            
+    elif "you are the lead programmer" in prompt_lower:
         return json.dumps(MOCK_RESPONSES["programmer_plan"])
-    if "database architect" in prompt:
+        
+    elif "you are the database architect" in prompt_lower:
         return json.dumps(MOCK_RESPONSES["dba_plan"])
-    if "chief technology officer" in prompt:
-        return json.dumps(MOCK_RESPONSES["cto_plan"])
 
-    # Default fallback
+    # Default fallback if no specific prompt is matched
     return json.dumps(MOCK_RESPONSES["reflection_complete"])
 
-# --- Main API Function ---
+# --- Main API Function (is unchanged) ---
 def generate_structured_response(prompt: str) -> str | None:
-    """
-    Main function to get a response. Switches between real and mock mode.
-    """
     if MOCK_MODE:
         return _get_mock_response(prompt)
 
