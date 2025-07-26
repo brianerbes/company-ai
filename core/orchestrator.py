@@ -9,11 +9,21 @@ def create_file(fs: FileSystemManager, payload: dict):
     return {"status": "success", "message": f"File created at '{path}'."}
 
 def write_file(fs: FileSystemManager, payload: dict):
+    """Tool to write or append content to a file."""
     path = payload.get("path") or payload.get("filepath")
     content = payload.get("content")
-    if not path or content is None: return {"status": "error", "message": "Payload must include 'path' and 'content'."}
-    fs.write_file(path, content, append=False)
-    return {"status": "success", "message": f"Content written to '{path}'."}
+    # Check for the new 'append' flag, default to False if not present
+    should_append = payload.get("append", False)
+
+    if not path or content is None:
+        return {"status": "error", "message": "Payload must include 'path' and 'content'."}
+    
+    fs.write_file(path, content, append=should_append)
+    
+    if should_append:
+        return {"status": "success", "message": f"Content appended to '{path}'."}
+    else:
+        return {"status": "success", "message": f"Content written to '{path}'."}
 
 def read_file(fs: FileSystemManager, payload: dict):
     path = payload.get("path") or payload.get("filepath")

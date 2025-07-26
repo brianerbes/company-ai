@@ -21,12 +21,16 @@ class Agent:
         print(f"    Role: {self.role}")
         
     def _get_tool_manifest(self) -> str:
+        """
+        Creates a detailed string manifest of available tools and their parameters.
+        """
         tool_descriptions = {
             "CREATE_FILE": "Creates a new, empty file. Payload requires a 'path'.",
-            "WRITE_FILE": "Writes content to a file, overwriting it. Payload requires 'path' and 'content'.",
+            "WRITE_FILE": "Writes or appends content to a file. Payload requires 'path' and 'content'. To append, include 'append': true in the payload.",
             "READ_FILE": "Reads the content of a file. Payload requires a 'path'.",
             "DELEGATE_TASK": "Delegates a new task to another agent. Payload requires 'assignee_id' and 'description'."
         }
+        
         available_tools = self.meta.get('capabilities', {}).get('allowed_tools', [])
         manifest = "Your available tools and their required parameters are:\n"
         for tool_name in available_tools:

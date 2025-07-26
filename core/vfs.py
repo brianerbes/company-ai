@@ -69,16 +69,18 @@ class FileSystemManager:
             return None
 
     def write_file(self, file_path: str, content: str, append: bool = False):
-        """Writes content to a file at a given relative path."""
+        """
+        Writes or appends content to a file at a given relative path.
+        """
         try:
             target_path = self._resolve_path(file_path)
             
-            # Ensure the parent directory exists
             target_path.parent.mkdir(parents=True, exist_ok=True)
             
+            # Use 'a' for append mode, 'w' for write mode
             mode = 'a' if append else 'w'
+            
             with open(target_path, mode, encoding='utf-8') as f:
                 f.write(content)
         except PermissionError as e:
-            # Re-raise to signal a security/access issue
             raise e
