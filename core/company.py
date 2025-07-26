@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 from .vfs import FileSystemManager
 from .agent import Agent
-from .task import Task # Importar la nueva clase Task
+from .task import Task
+from .memory import MemoryManager
 
 class Company:
     """
@@ -15,8 +16,9 @@ class Company:
         self.path = company_path
         self.name = manifest_data.get('identity', {}).get('name', 'Unnamed Company')
         self.fs = FileSystemManager(company_root=self.path)
+        self.memory = MemoryManager(company_root=self.path) # <-- ADD THIS LINE
         self.agents = {}
-        self.tasks = {} # Un diccionario para mantener las tareas activas
+        self.tasks = {} # A dictionary to hold active tasks
 
     def __repr__(self) -> str:
         return f"<Company name='{self.name}'>"

@@ -30,6 +30,22 @@ def read_file(fs: FileSystemManager, payload: dict):
     if content is None: return {"status": "error", "message": f"File not found at '{path}'."}
     return {"status": "success", "content": content}
 
+def memorize_this(memory: "MemoryManager", payload: dict):
+    """Tool to add a piece of text to long-term memory."""
+    text = payload.get("text")
+    metadata = payload.get("metadata", {})
+    if not text:
+        return {"status": "error", "message": "Payload must include 'text'."}
+    
+    memory.memorize(text, metadata)
+    return {"status": "success", "message": "Information memorized."}
+
+def recall_context(memory: "MemoryManager", payload: dict):
+    """Tool to recall relevant context from long-term memory."""
+    query = payload.get("query")
+    if not query:
+        return {"status": "error", "message": "Payload must include 'query'."}
+
 # Note the forward reference string "Company" in the type hint
 def delegate_task(company: "Company", current_task: "Task", payload: dict):
     """Tool to delegate a new task and optionally block the current task."""
@@ -68,8 +84,10 @@ TOOL_REGISTRY = {
     "CREATE_FILE": create_file,
     "WRITE_FILE": write_file,
     "READ_FILE": read_file,
+    "LIST_FILES": list_files,
     "DELEGATE_TASK": delegate_task,
-    "LIST_FILES": list_files, 
+    "MEMORIZE_THIS": memorize_this,
+    "RECALL_CONTEXT": recall_context,
 }
 
 
@@ -89,10 +107,12 @@ def execute_actions(actions: list, company: "Company", current_task: "Task"):
             result = {"status": "error", "message": f"Tool '{tool_name}' not found in registry."}
         else:
             try:
-                if tool_name == "DELEGATE_TASK":
-                    # The delegate tool now needs the current_task as well
+                # Route the tool call to the correct service (VFS, Memory, or Company)
+                if tool_name in ["MEMORIZE_THIS", "RECALL_CONTEXT"]:
+                    result = tool_function(company.memory, payload)
+                elif tool_name == "DELEGATE_TASK":
                     result = tool_function(company, current_task, payload)
-                else:
+                else: # Default to filesystem tools
                     result = tool_function(company.fs, payload)
             except Exception as e:
                 result = {"status": "fatal_error", "message": str(e)}

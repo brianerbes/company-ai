@@ -59,12 +59,28 @@ MOCK_RESPONSES = {
         ]
     },
     "cto_plan_assemble": {
-        "reasoning": "MOCK: My team has completed their work, and my task is now unblocked. I will read their files and assemble the final specification.",
+        "reasoning": "MOCK: My team has completed their work. I will read their files, MEMORIZE the key information, RECALL it to ensure it's in my memory, and then write the final specification.",
         "actions": [
-            {"tool_name": "READ_FILE", "payload": {"path": "docs/api_spec.md"}},
-            {"tool_name": "READ_FILE", "payload": {"path": "docs/db_schema.md"}},
-            {"tool_name": "CREATE_FILE", "payload": {"path": "docs/final_spec.md"}},
-            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/final_spec.md", "content": "# MOCK FINAL SPECIFICATION\n\nThis document combines the work of the team."}}
+            {
+                "tool_name": "MEMORIZE_THIS", 
+                "payload": {
+                    "text": "The API spec was created by the Lead Programmer.",
+                    "metadata": {"source": "CTO's thought"}
+                }
+            },
+            {
+                "tool_name": "RECALL_CONTEXT", 
+                "payload": {
+                    "query": "Who created the API spec?"
+                }
+            },
+            {
+                "tool_name": "WRITE_FILE", 
+                "payload": {
+                    "path": "docs/final_spec.md", 
+                    "content": "# MOCK FINAL SPECIFICATION\n\nAssembled by the CTO."
+                }
+            }
         ]
     },
     "reflection_incomplete_delegated": {
