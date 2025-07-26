@@ -1,7 +1,8 @@
+# app.py
+
 from pathlib import Path
 from core.company import Company, discover_companies
 
-# Define the root path of the workspace where all companies are stored.
 WORKSPACE_ROOT = Path(__file__).parent / "workspace"
 
 def main():
@@ -16,7 +17,7 @@ def main():
     company_manifests = discover_companies(WORKSPACE_ROOT)
     
     if not company_manifests:
-        print("No valid companies found. Please create a company folder with a valid manifest.json.")
+        print("No valid companies found. Exiting.")
         return
 
     print(f"Found {len(company_manifests)} company/companies:")
@@ -24,20 +25,24 @@ def main():
         print(f"  [{i+1}] {manifest['identity']['name']}")
     print("-" * 20)
 
-    # 2. Select a company (for now, we'll auto-select the first one)
-    # In the future, this will be a user input prompt.
+    # 2. Select a company (auto-selecting the first one)
     selected_manifest = company_manifests[0]
+    company_path = selected_manifest.pop('_company_path') # Get and remove path from dict
     print(f"Loading selected company: '{selected_manifest['identity']['name']}'...")
     
-    # 3. Load the company into a dedicated object
-    active_company = Company(selected_manifest)
+    # 3. Load the company into an object, now providing its path
+    active_company = Company(selected_manifest, company_path)
     
     print("Company loaded successfully.")
     print("-" * 20)
     active_company.print_summary()
     print("-" * 20)
     
-    # The main application loop will start here in the future...
-
+    # 4. Test the Virtual File System
+    print("Testing VFS by listing files at company root ('/'):")
+    root_files = active_company.fs.list_files('/')
+    print(f"  -> Found files: {root_files}")
+    print("-" * 20)
+    
 if __name__ == "__main__":
     main()
