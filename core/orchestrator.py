@@ -47,6 +47,9 @@ def recall_context(memory: "MemoryManager", payload: dict):
     if not query:
         return {"status": "error", "message": "Payload must include 'query'."}
 
+    results = memory.recall(query)
+    return {"status": "success", "results": results}
+
 # Note the forward reference string "Company" in the type hint
 def delegate_task(company: "Company", current_task: "Task", payload: dict):
     """Tool to delegate a new task and optionally block the current task."""
