@@ -174,21 +174,19 @@ class Agent:
         print(f"\nAgent '{self.role}' is processing Task {task.task_id}...")
         
         max_iterations = 3
-        iteration_count = 0
-        previous_attempts = []
         is_complete = False
 
-        while not is_complete and iteration_count < max_iterations:
-            iteration_count += 1
-            print(f"\n{'='*10} Starting Iteration #{iteration_count} {'='*10}")
+        while not is_complete and task.iteration_count < max_iterations:
+            task.iteration_count += 1
+            print(f"\n{'='*10} Starting Iteration #{task.iteration_count} {'='*10}")
 
             # === 1. PLAN PHASE ===
             print("\n--- Phase 1: Planning ---")
-            task.set_status(TaskStatus.IN_PROGRESS, f"Agent is planning iteration {iteration_count}.")
-            if iteration_count == 1:
+            task.set_status(TaskStatus.IN_PROGRESS, f"Agent is planning iteration {task.iteration_count}.")
+            if task.iteration_count == 1:
                 plan_prompt = self._construct_initial_prompt(task)
             else:
-                plan_prompt = self._construct_iteration_prompt(task, previous_attempts)
+                plan_prompt = self._construct_iteration_prompt(task, task.previous_attempts)
             
             raw_plan_response = generate_structured_response(plan_prompt)
             if not raw_plan_response:
@@ -228,10 +226,10 @@ class Agent:
                 
                 if is_complete:
                     print("\nAgent has concluded the task is complete.")
-                    task.set_status(TaskStatus.COMPLETED, f"Agent self-assessed as complete after {iteration_count} iteration(s).")
+                    task.set_status(TaskStatus.COMPLETED, f"Agent self-assessed as complete after {task.iteration_count} iteration(s).")
                 else:
                     print("\nAgent has concluded the task is INCOMPLETE. Preparing for next iteration.")
-                    previous_attempts.append({
+                    task.previous_attempts.append({
                         "plan": plan,
                         "execution_results": execution_results,
                         "critique": reflection

@@ -16,6 +16,10 @@ class Task:
     def __init__(self, description: str, assignee_id: str, delegator_id: str = "OWNER", dependencies: list[str] = None):
         self.task_id: str = str(uuid.uuid4())
         self.description: str = description
+
+        # State memory for the agent's iterative process
+        self.iteration_count: int = 0
+        self.previous_attempts: list = []
         self.assignee_id: str = assignee_id
         self.delegator_id: str = delegator_id
         
