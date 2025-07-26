@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 from .vfs import FileSystemManager
 from .task import Task, TaskStatus
-from .llm_api import generate_structured_response # Import the LLM call function
+from .llm_api import generate_structured_response
+from .orchestrator import execute_actions  # <-- THE MISSING IMPORT
 
 class Agent:
     """
@@ -26,9 +27,6 @@ class Agent:
         
     def _construct_prompt(self, task: Task) -> str:
         """Constructs the full prompt for the LLM based on agent and task context."""
-        
-        # This is the "Invisible Protocol" (SAID) defined in the blueprint.
-        # We are instructing the LLM on how to behave and format its response.
         said_format = """
         {
           "reasoning": "A brief, step-by-step thought process for how you will approach the task. Explain your plan.",
@@ -43,7 +41,6 @@ class Agent:
           ]
         }
         """
-
         prompt = f"""
         You are an AI agent. Do not act as a user.
         
@@ -63,15 +60,12 @@ class Agent:
 
     def process_task(self, task: Task):
         """
-        Processes a given task by calling the LLM and parsing the response.
+        Processes a given task by calling the LLM and then executing the planned actions.
         """
         print(f"\nAgent '{self.role}' is now processing Task {task.task_id}...")
         task.set_status(TaskStatus.IN_PROGRESS)
         
-        # 1. Construct the prompt
         prompt = self._construct_prompt(task)
-        
-        # 2. Call the LLM
         raw_response = generate_structured_response(prompt)
         
         if not raw_response:
@@ -81,22 +75,21 @@ class Agent:
 
         print("  -> Agent received a response from the LLM.")
         
-        # 3. Parse and display the response
         try:
-            # Clean the response to ensure it's valid JSON
             clean_response = raw_response.strip().replace("```json", "").replace("```", "")
             parsed_response = json.loads(clean_response)
             
-            print("\n--- Agent's Plan ---")
-            print(f"Reasoning: {parsed_response.get('reasoning')}")
-            print("Proposed Actions:")
-            for i, action in enumerate(parsed_response.get('actions', [])):
-                print(f"  {i+1}. Tool: {action.get('tool_name')}")
-                print(f"     Payload: {action.get('payload')}")
-            print("--------------------\n")
+            reasoning = parsed_response.get('reasoning', 'No reasoning provided.')
+            actions = parsed_response.get('actions', [])
             
-            # For now, we'll just mark it as complete after planning.
-            task.set_status(TaskStatus.COMPLETED, "Agent plan generated successfully.")
+            print(f"\n--- Agent's Plan ---\nReasoning: {reasoning}\n--------------------")
+
+            if actions:
+                execute_actions(actions, self.fs)
+            else:
+                print("Agent planned no actions.")
+
+            task.set_status(TaskStatus.COMPLETED, "Agent plan executed successfully.")
             
         except json.JSONDecodeError:
             print("  -> ERROR: Agent returned invalid JSON. Could not parse the plan.")
