@@ -129,7 +129,10 @@ class Agent:
         
         {tool_manifest}
         {team_roster}
-        
+
+        **Planning Strategy:** If you use the DELEGATE_TASK tool with 'block_self' set to true, your plan for this turn should ONLY contain the delegation actions. You can read their work and assemble it in a future turn, after your task has been unblocked by the scheduler.
+
+        Based on your critique and all other information, create a new plan.    
         Your new response MUST be a valid JSON object following this exact structure:
         {said_format}
         """

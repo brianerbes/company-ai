@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from core.company import Company, discover_companies
 from core.task import TaskStatus
@@ -29,7 +30,7 @@ def main():
     
     # 3. Main Scheduler Loop
     print("\n--- Starting Main Scheduler Loop ---")
-    MAX_SCHEDULER_CYCLES = 10 # Increase cycles for multi-step processes
+    MAX_SCHEDULER_CYCLES = 10 
     cycles = 0
     while cycles < MAX_SCHEDULER_CYCLES:
         cycles += 1
@@ -49,16 +50,21 @@ def main():
         
         if not runnable_tasks:
             print("No runnable tasks found in this cycle.")
-            # Check if all tasks are done
             if all(t.status in [TaskStatus.COMPLETED, TaskStatus.FAILED] for t in active_company.tasks.values()):
                 print("All tasks are completed or failed. Shutting down scheduler.")
                 break
+            # Add a small delay if there's nothing to do, to prevent busy-waiting
+            time.sleep(2)
+            continue
 
         print(f"Found {len(runnable_tasks)} runnable task(s).")
         for task in runnable_tasks:
             agent = active_company.agents.get(task.assignee_id)
             if agent:
                 agent.process_task(task)
+                # Add a delay *between* each agent's turn to space out API calls
+                print(f"--- Short delay after {agent.role}'s turn ---")
+                time.sleep(2) 
             else:
                 task.set_status(TaskStatus.FAILED, f"Assignee '{task.assignee_id}' not found.")
     print("Final Task Statuses:")
