@@ -1,5 +1,3 @@
-# app.py
-
 from pathlib import Path
 from core.company import Company, discover_companies
 
@@ -12,7 +10,7 @@ def main():
     print("CompanIA application starting...")
     print("-" * 20)
     
-    # 1. Cargar la compañía y los agentes
+    # 1. Load the company and agents
     company_manifests = discover_companies(WORKSPACE_ROOT)
     if not company_manifests:
         print("No valid companies found. Exiting.")
@@ -24,22 +22,20 @@ def main():
     active_company.load_agents()
     print("-" * 20)
 
-    # 2. Crear una tarea de ejemplo
-    print("Creating a sample task for the CTO...")
+    # 2. Create and assign a task
     cto_id = "agent_id_cto_001"
     if cto_id in active_company.agents:
-        task_description = "Draft the technical specification for the new 'Dynamic Task Graph' feature."
+        task_description = "Draft the technical specification for the new 'Dynamic Task Graph' feature. The document should be created at 'docs/tech_spec_task_graph.md'."
         task = active_company.create_task(description=task_description, assignee_id=cto_id)
         
-        print("\nTask Details:")
-        print(f"  ID: {task.task_id}")
-        print(f"  Description: {task.description}")
-        print(f"  Status: {task.status.value}")
-        print(f"  Assignee: {task.assignee_id}")
+        # 3. Trigger the agent to process the task
+        cto_agent = active_company.agents[cto_id]
+        cto_agent.process_task(task)
     else:
         print(f"Could not create task: Agent '{cto_id}' not found.")
     
     print("-" * 20)
+    print("Application cycle complete.")
 
 
 if __name__ == "__main__":
