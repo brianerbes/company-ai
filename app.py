@@ -12,7 +12,7 @@ def main():
     print("CompanIA application starting...")
     print("-" * 20)
     
-    # 1. Discover available companies
+    # 1. Cargar la compañía y los agentes
     company_manifests = discover_companies(WORKSPACE_ROOT)
     if not company_manifests:
         print("No valid companies found. Exiting.")
@@ -20,24 +20,27 @@ def main():
     selected_manifest = company_manifests[0]
     company_path = selected_manifest.pop('_company_path')
     
-    # 2. Load the company
-    print(f"Loading company: '{selected_manifest['identity']['name']}'...")
     active_company = Company(selected_manifest, company_path)
-    active_company.print_summary()
-    print("-" * 20)
-    
-    # 3. Load the company's agents
     active_company.load_agents()
     print("-" * 20)
 
-    # 4. Print a summary of the loaded team
-    print("Active team roster:")
-    if not active_company.agents:
-        print("  No agents found.")
+    # 2. Crear una tarea de ejemplo
+    print("Creating a sample task for the CTO...")
+    cto_id = "agent_id_cto_001"
+    if cto_id in active_company.agents:
+        task_description = "Draft the technical specification for the new 'Dynamic Task Graph' feature."
+        task = active_company.create_task(description=task_description, assignee_id=cto_id)
+        
+        print("\nTask Details:")
+        print(f"  ID: {task.task_id}")
+        print(f"  Description: {task.description}")
+        print(f"  Status: {task.status.value}")
+        print(f"  Assignee: {task.assignee_id}")
     else:
-        for agent in active_company.agents.values():
-            agent.print_summary()
-    print("-" * 20)
+        print(f"Could not create task: Agent '{cto_id}' not found.")
     
+    print("-" * 20)
+
+
 if __name__ == "__main__":
     main()

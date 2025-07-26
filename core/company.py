@@ -3,7 +3,8 @@
 import json
 from pathlib import Path
 from .vfs import FileSystemManager
-from .agent import Agent  # Import the new Agent class
+from .agent import Agent
+from .task import Task # Importar la nueva clase Task
 
 class Company:
     """
@@ -14,7 +15,8 @@ class Company:
         self.path = company_path
         self.name = manifest_data.get('identity', {}).get('name', 'Unnamed Company')
         self.fs = FileSystemManager(company_root=self.path)
-        self.agents = {} # A dictionary to hold loaded agent objects
+        self.agents = {}
+        self.tasks = {} # Un diccionario para mantener las tareas activas
 
     def __repr__(self) -> str:
         return f"<Company name='{self.name}'>"
@@ -25,16 +27,23 @@ class Company:
         print(f"Vision: {self.manifest.get('identity', {}).get('vision', 'N/A')}")
         print(f"Path: {self.path}")
 
+    def create_task(self, description: str, assignee_id: str) -> Task:
+        """Creates a new task and adds it to the company's task registry."""
+        if assignee_id not in self.agents:
+            raise ValueError(f"Cannot assign task: Agent ID '{assignee_id}' not found.")
+        
+        new_task = Task(description=description, assignee_id=assignee_id)
+        self.tasks[new_task.task_id] = new_task
+        print(f"New task created and assigned to {assignee_id}: {new_task.task_id}")
+        return new_task
+
     def load_agents(self):
         """
         Scans the company's VFS for agent directories and loads them.
-        An agent directory is identified by the presence of a '.agent_meta.json' file.
         """
         print("Loading agents...")
         agent_dirs = self.fs.list_files('/')
         for dir_name in agent_dirs:
-            # In a real VFS, we'd check if it's a directory.
-            # For now, we'll just check for the meta file's path.
             meta_path = Path(dir_name) / '.agent_meta.json'
             meta_content_str = self.fs.read_file(str(meta_path))
 
@@ -50,14 +59,9 @@ class Company:
                     print(f"  -> WARNING: Could not parse .agent_meta.json in '{dir_name}'")
         print(f"Total agents loaded: {len(self.agents)}")
 
-# --- discover_companies function remains the same ---
-# (The rest of the file is unchanged)
-
+# --- La función discover_companies permanece igual ---
 def discover_companies(workspace_path: Path) -> list[dict]:
-    """
-    Scans the workspace directory for valid company folders.
-    ...
-    """
+    # ... (código sin cambios)
     discovered_companies = []
     if not workspace_path.is_dir():
         return discovered_companies
