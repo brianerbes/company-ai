@@ -4,12 +4,13 @@ import json
 from collections import deque
 import google.generativeai as genai
 from dotenv import load_dotenv
+import google.auth
 
 # --- Configuration ---
 load_dotenv()
 MOCK_MODE = os.getenv("MOCK_MODE", "False").lower() in ('true', '1', 't')
 
-# --- NEW: API Rate Limiter ---
+# --- API Rate Limiter ---
 class APIRateLimiter:
     """A simple client-side rate limiter to stay within API quotas."""
     def __init__(self, max_requests: int, per_seconds: int):
@@ -40,17 +41,22 @@ rate_limiter = APIRateLimiter(max_requests=10, per_seconds=60)
 print(f"--- MOCK MODE status: {MOCK_MODE} ---")
 
 if not MOCK_MODE:
-    print("--- Configuring REAL Gemini API client ---")
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY not found. Please set it in your .env file.")
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    print("--- Configuring REAL Gemini API client (using Application Default Credentials) ---")
+    try:
+        # This automatically finds the credentials you created with 'gcloud auth application-default login'
+        credentials, project_id = google.auth.default()
+        genai.configure(credentials=credentials)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        print(f"--- Authenticated successfully for project: {project_id} ---")
+    except Exception as e:
+        print(f"--- FATAL ERROR: Could not authenticate with Google Cloud. ---")
+        print("--- Please ensure you have run 'gcloud auth application-default login' in your terminal. ---")
+        raise e
 else:
     print("--- Mock mode is active. Real API will not be used. ---")
 
 
-# --- Mock Responses ---
+# --- Mock Responses (for testing) ---
 MOCK_RESPONSES = {
     "simple_chat_plan": {
         "reasoning": "MOCK: The user sent a simple message. I will respond with a polite and helpful greeting.",
@@ -87,8 +93,42 @@ MOCK_RESPONSES = {
     "reflection_complete": {
         "critique": "MOCK: The execution was flawless and the results perfectly match the plan.",
         "is_complete": True
+    },
+    "mock_intent_chat": {
+        "intent": "simple_chat"
+    },
+    "mock_intent_task": {
+        "intent": "complex_task",
+        "task_summary": "Oversee the creation of the technical specification for the new feature."
     }
 }
+
+def get_intent(user_message: str) -> dict:
+    """
+    Uses a lightweight LLM call to determine the user's intent.
+    """
+    if MOCK_MODE:
+        if "oversee" in user_message.lower() or "specification" in user_message.lower():
+            return MOCK_RESPONSES["mock_intent_task"]
+        else:
+            return MOCK_RESPONSES["mock_intent_chat"]
+
+    intent_prompt = f"""
+    Analyze the user's message and classify its intent.
+    User message: "{user_message}"
+
+    Respond with ONLY a JSON object with one of two formats:
+    1. For simple greetings, questions, or conversation:
+       {{"intent": "simple_chat"}}
+    2. For commands or requests to perform a complex, multi-step task:
+       {{"intent": "complex_task", "task_summary": "A concise summary of the task."}}
+    """
+    
+    raw_response = generate_structured_response(intent_prompt)
+    try:
+        return json.loads(raw_response)
+    except (json.JSONDecodeError, TypeError):
+        return {"intent": "simple_chat"}
 
 def _get_mock_response(prompt: str) -> str:
     """Selects an appropriate mock response based on the agent and task."""

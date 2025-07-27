@@ -64,3 +64,6 @@ venv.bak/
 .idea/
 .vscode/
 *.swp
+
+# Secret credentials
+service-account-key.json

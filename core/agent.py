@@ -135,73 +135,40 @@ class Agent:
         def ui_message(text, msg_type="info"):
             if self.company.pubsub and task.ui_channel:
                 self.company.pubsub.send_all({
-                    "text": text,
-                    "type": msg_type,
-                    "agent": self.role,
-                    "channel": task.ui_channel
+                    "text": text, "type": msg_type, "agent": self.role, "channel": task.ui_channel
                 })
         
         ui_message(f"Processing Task {task.task_id[:8]}...")
         
-        max_iterations = 3
-        is_complete = False
-        while not is_complete and task.iteration_count < max_iterations:
-            task.iteration_count += 1
-            print(f"\n{'='*10} Starting Iteration #{task.iteration_count} {'='*10}")
+        # We will attempt just one plan-execute cycle to reduce API calls.
+        task.iteration_count += 1
+        print(f"\n{'='*10} Starting Iteration #{task.iteration_count} {'='*10}")
 
-            # === 1. PLAN PHASE ===
-            ui_message(f"Starting Iteration #{task.iteration_count}: Planning...")
-            task.set_status(TaskStatus.IN_PROGRESS, f"Agent is planning iteration {task.iteration_count}.")
-            if task.iteration_count == 1:
-                plan_prompt = self._construct_initial_prompt(task)
-            else:
-                plan_prompt = self._construct_iteration_prompt(task, task.previous_attempts)
-            
-            raw_plan_response = generate_structured_response(plan_prompt)
-            if not raw_plan_response:
-                task.set_status(TaskStatus.FAILED, "Agent failed to generate a plan.")
-                return
+        # === 1. PLAN PHASE ===
+        ui_message(f"Starting Iteration #{task.iteration_count}: Planning...")
+        task.set_status(TaskStatus.IN_PROGRESS, f"Agent is planning.")
+        
+        # For now, we only use the initial prompt as we won't be iterating.
+        plan_prompt = self._construct_initial_prompt(task)
+        
+        raw_plan_response = generate_structured_response(plan_prompt)
+        if not raw_plan_response:
+            task.set_status(TaskStatus.FAILED, "Agent failed to generate a plan.")
+            return
 
-            try:
-                plan = json.loads(raw_plan_response.strip().replace("```json", "").replace("```", ""))
-                ui_message(f"Plan: {plan.get('reasoning')}", msg_type="agent")
-            except json.JSONDecodeError:
-                task.set_status(TaskStatus.FAILED, f"Agent returned invalid JSON for its plan. Raw response: {raw_plan_response}")
-                return
-            
-            # === 2. EXECUTE PHASE ===
-            actions = plan.get('actions', [])
-            execution_results = execute_actions(actions, self.company, task) if actions else []
-            
-            if task.status == TaskStatus.BLOCKED:
-                ui_message(f"Task is now BLOCKED, waiting for dependencies. Ending turn.")
-                return
-
-            # === 3. REFLECT PHASE ===
-            ui_message("Reflecting on the results...")
-            reflection_prompt = self._construct_reflection_prompt(task, plan, execution_results)
-            raw_reflection_response = generate_structured_response(reflection_prompt)
-            if not raw_reflection_response:
-                task.set_status(TaskStatus.FAILED, "Agent failed to generate a reflection.")
-                return
-            
-            try:
-                reflection = json.loads(raw_reflection_response.strip().replace("```json", "").replace("```", ""))
-                critique = reflection.get('critique', 'No critique provided.')
-                is_complete = reflection.get('is_complete', False)
-                ui_message(f"Critique: {critique}", msg_type="agent")
-                
-                if is_complete:
-                    task.set_status(TaskStatus.COMPLETED, f"Agent self-assessed as complete after {task.iteration_count} iteration(s).")
-                else:
-                    ui_message("Task is INCOMPLETE. Preparing for next iteration.")
-                    task.previous_attempts.append({
-                        "plan": plan, "execution_results": execution_results, "critique": reflection
-                    })
-            except json.JSONDecodeError:
-                task.set_status(TaskStatus.FAILED, f"Agent returned invalid JSON for its reflection. Raw response: {raw_reflection_response}")
-                return
-
-        if not is_complete:
-            ui_message(f"Failed to complete the task after {max_iterations} iterations.", msg_type="system")
-            task.set_status(TaskStatus.FAILED, f"Agent failed to complete task after {max_iterations} iterations.")
+        try:
+            plan = json.loads(raw_plan_response.strip().replace("```json", "").replace("```", ""))
+            ui_message(f"Plan: {plan.get('reasoning')}", msg_type="agent")
+        except json.JSONDecodeError:
+            task.set_status(TaskStatus.FAILED, f"Agent returned invalid JSON for its plan.")
+            return
+        
+        # === 2. EXECUTE PHASE ===
+        actions = plan.get('actions', [])
+        execution_results = execute_actions(actions, self.company, task) if actions else []
+        
+        # === 3. REFLECTION PHASE (DISABLED) ===
+        # We now assume the agent's plan is good enough for the first try.
+        # This reduces API calls from 2 to 1 per turn.
+        if task.status != TaskStatus.BLOCKED:
+            task.set_status(TaskStatus.COMPLETED, "Agent finished its turn.")
