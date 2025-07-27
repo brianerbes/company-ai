@@ -87,42 +87,8 @@ MOCK_RESPONSES = {
     "reflection_complete": {
         "critique": "MOCK: The execution was flawless and the results perfectly match the plan.",
         "is_complete": True
-    },
-    "mock_intent_chat": {
-        "intent": "simple_chat"
-    },
-    "mock_intent_task": {
-        "intent": "complex_task",
-        "task_summary": "Oversee the creation of the technical specification for the new feature."
     }
 }
-
-def get_intent(user_message: str) -> dict:
-    """
-    Uses a lightweight LLM call to determine the user's intent.
-    """
-    if MOCK_MODE:
-        if "oversee" in user_message.lower() or "specification" in user_message.lower():
-            return MOCK_RESPONSES["mock_intent_task"]
-        else:
-            return MOCK_RESPONSES["mock_intent_chat"]
-
-    intent_prompt = f"""
-    Analyze the user's message and classify its intent.
-    User message: "{user_message}"
-
-    Respond with ONLY a JSON object with one of two formats:
-    1. For simple greetings, questions, or conversation:
-       {{"intent": "simple_chat"}}
-    2. For commands or requests to perform a complex, multi-step task:
-       {{"intent": "complex_task", "task_summary": "A concise summary of the task."}}
-    """
-    
-    raw_response = generate_structured_response(intent_prompt)
-    try:
-        return json.loads(raw_response)
-    except (json.JSONDecodeError, TypeError):
-        return {"intent": "simple_chat"}
 
 def _get_mock_response(prompt: str) -> str:
     """Selects an appropriate mock response based on the agent and task."""

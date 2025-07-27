@@ -5,7 +5,6 @@ import threading
 import json
 from core.company import Company, discover_companies
 from core.task import TaskStatus
-from core.llm_api import get_intent
 
 WORKSPACE_ROOT = Path(__file__).parent / "workspace"
 
@@ -118,20 +117,9 @@ def main(page: ft.Page):
         selected_agent.chat_history.append({"speaker": "You", "text": user_message, "type": "user"})
         chat_view.controls.append(ft.Text(f"You: {user_message}", size=14, weight=ft.FontWeight.BOLD))
         message_input.value = ""
-        page.update()
-
-        # --- INTENT RECOGNITION STEP ---
-        intent_data = get_intent(user_message)
-        intent = intent_data.get("intent", "simple_chat")
-
-        task_description = ""
-        if intent == "simple_chat":
-            task_description = f"The user said: '{user_message}'. Respond with a simple, direct, conversational reply. Use the SEND_MESSAGE_TO_USER tool once and only once."
-        else:
-            task_description = intent_data.get("task_summary", user_message)
         
-        # Create a task based on the recognized intent
-        active_company.create_task(description=task_description, assignee_id=selected_agent.id, ui_channel=selected_agent.id)
+        # The task description is now simply the user's message
+        active_company.create_task(description=user_message, assignee_id=selected_agent.id, ui_channel=selected_agent.id)
         
         # Start the scheduler if it's not already running
         if scheduler_thread is None or not scheduler_thread.is_alive():
