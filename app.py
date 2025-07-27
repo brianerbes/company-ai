@@ -1,75 +1,95 @@
-import time
+import flet as ft
 from pathlib import Path
 from core.company import Company, discover_companies
-from core.task import TaskStatus
 
 WORKSPACE_ROOT = Path(__file__).parent / "workspace"
 
-def main():
-    print("CompanIA application starting...")
-    print("-" * 20)
-    
-    # 1. Load the company and agents
+def main(page: ft.Page):
+    page.title = "CompanIA"
+    page.window_width = 1200
+    page.window_height = 800
+    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+
+    # --- Data Loading ---
+    # Show a progress ring while we load the company data
+    progress_ring = ft.ProgressRing()
+    page.add(progress_ring)
+    page.update()
+
     company_manifests = discover_companies(WORKSPACE_ROOT)
-    if not company_manifests: return
+    if not company_manifests:
+        page.controls.clear()
+        page.add(ft.Text("FATAL: No valid companies found in workspace. Exiting.", size=20))
+        page.update()
+        return
+
     selected_manifest = company_manifests[0]
     company_path = selected_manifest.pop('_company_path')
     active_company = Company(selected_manifest, company_path)
     active_company.load_agents()
-    
-    print("\nTeam Roster:")
-    for agent in active_company.agents.values():
-        agent.print_summary()
-    print("-" * 20)
 
-    # 2. Create the initial, high-level task for the CTO
-    cto_id = "agent_id_cto_001"
-    if cto_id in active_company.agents and not active_company.tasks:
-        task_description = "Oversee the creation of the technical specification for the new 'Dynamic Task Graph' feature. You must delegate the detailed work to your team and block your own task until they are complete. You will then assemble their work into the final document."
-        active_company.create_task(description=task_description, assignee_id=cto_id)
-    
-    # 3. Main Scheduler Loop
-    print("\n--- Starting Main Scheduler Loop ---")
-    MAX_SCHEDULER_CYCLES = 10 
-    cycles = 0
-    while cycles < MAX_SCHEDULER_CYCLES:
-        cycles += 1
-        print(f"\n{'='*15} Scheduler Cycle {cycles} {'='*15}")
+    # --- UI Controls and Event Handlers ---
+    chat_view = ft.ListView(
+        controls=[ft.Text("Select an agent to begin...", size=16, text_align=ft.TextAlign.CENTER)],
+        expand=True,
+        auto_scroll=True,
+        spacing=10,
+        padding=20,
+    )
+
+    def select_agent(e):
+        """Called when an agent is clicked in the sidebar."""
+        selected_agent = e.control.data
         
-        # 1. Un-block tasks whose dependencies are complete
-        print("Checking for completed dependencies...")
-        for task in active_company.tasks.values():
-            if task.status == TaskStatus.BLOCKED:
-                deps_ids = task.dependencies
-                # Check if all dependencies are complete
-                if all(active_company.tasks.get(dep_id).status == TaskStatus.COMPLETED for dep_id in deps_ids):
-                    task.set_status(TaskStatus.PENDING, f"All dependencies ({len(deps_ids)}) are complete.")
+        # Clear the chat and add a header
+        chat_view.controls.clear()
+        chat_view.controls.append(
+             ft.Text(f"Conversation with {selected_agent.role}", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
+        )
+        chat_view.controls.append(ft.Divider())
+        page.update()
 
-        # 2. Find and execute runnable tasks
-        runnable_tasks = [t for t in active_company.tasks.values() if t.status == TaskStatus.PENDING]
-        
-        if not runnable_tasks:
-            print("No runnable tasks found in this cycle.")
-            if all(t.status in [TaskStatus.COMPLETED, TaskStatus.FAILED] for t in active_company.tasks.values()):
-                print("All tasks are completed or failed. Shutting down scheduler.")
-                break
-            # Add a small delay if there's nothing to do, to prevent busy-waiting
-            time.sleep(2)
-            continue
+    # --- Build the Sidebar ---
+    agent_list_items = []
+    for agent_id, agent in active_company.agents.items():
+        agent_list_items.append(
+            ft.ListTile(
+                leading=ft.Icon(name="person_outline"),
+                title=ft.Text(agent.role),
+                subtitle=ft.Text(agent_id, size=10),
+                on_click=select_agent,
+                data=agent,
+            )
+        )
+    
+    sidebar = ft.Column(
+        controls=[
+            ft.Text("Agents", size=18, weight=ft.FontWeight.BOLD),
+            ft.Column(controls=agent_list_items, scroll=ft.ScrollMode.AUTO)
+        ],
+        width=250,
+        spacing=10,
+    )
 
-        print(f"Found {len(runnable_tasks)} runnable task(s).")
-        for task in runnable_tasks:
-            agent = active_company.agents.get(task.assignee_id)
-            if agent:
-                agent.process_task(task)
-                # Add a delay *between* each agent's turn to space out API calls
-                print(f"--- Short delay after {agent.role}'s turn ---")
-                time.sleep(2) 
-            else:
-                task.set_status(TaskStatus.FAILED, f"Assignee '{task.assignee_id}' not found.")
-    print("Final Task Statuses:")
-    for task in active_company.tasks.values():
-        print(f"  - Task {task.task_id[:8]}: {task.status.value}")
+    # --- Build the Final Layout ---
+    # Clear the progress ring and add the final UI
+    page.controls.clear()
+    page.vertical_alignment = ft.MainAxisAlignment.START
+    page.horizontal_alignment = ft.CrossAxisAlignment.START
+    page.padding = 10
+    page.add(
+        ft.Row(
+            controls=[
+                sidebar,
+                ft.VerticalDivider(width=1),
+                chat_view,
+            ],
+            expand=True,
+        )
+    )
+    page.update()
 
+# --- Run the Application ---
 if __name__ == "__main__":
-    main()
+    ft.app(target=main)
