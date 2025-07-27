@@ -80,14 +80,7 @@ def main(page: ft.Page):
     selected_agent = None
     scheduler_thread = None
 
-    # --- UI Controls ---
-    chat_view = ft.ListView(expand=True, spacing=10, padding=20)
-    message_input = ft.TextField(
-        hint_text="Type a message...",
-        expand=True,
-        on_submit=send_message  # <-- ADD THIS LINE
-    )
-
+    # --- Event Handlers and UI Updaters ---
     def on_message(msg):
         """PubSub handler to display messages from the backend."""
         msg_channel = msg.get("channel")
@@ -101,7 +94,6 @@ def main(page: ft.Page):
         # Determine the visual style of the message
         is_user_facing = mtype == "user_facing"
         is_system = mtype == "system"
-        is_user = mtype == "user"
 
         # Save all message types to history
         if selected_agent:
@@ -122,12 +114,12 @@ def main(page: ft.Page):
         if not user_message or not selected_agent:
             return
 
-        # Save the user's message to the history
+        # Save and display the user's message
         selected_agent.chat_history.append({"speaker": "You", "text": user_message, "type": "user"})
-
         chat_view.controls.append(ft.Text(f"You: {user_message}", size=14, weight=ft.FontWeight.BOLD))
         message_input.value = ""
         
+        # Create a task and start the scheduler
         active_company.create_task(description=user_message, assignee_id=selected_agent.id, ui_channel=selected_agent.id)
         
         if scheduler_thread is None or not scheduler_thread.is_alive():
@@ -135,10 +127,7 @@ def main(page: ft.Page):
             scheduler_thread = threading.Thread(target=scheduler.run, daemon=True)
             scheduler_thread.start()
         
-        chat_view.scroll_to(offset=-1, duration=100)
         page.update()
-
-    send_button = ft.IconButton(icon="send_rounded", on_click=send_message)
 
     def select_agent(e):
         nonlocal selected_agent
@@ -148,13 +137,12 @@ def main(page: ft.Page):
         chat_view.controls.append(ft.Text(f"Conversation with {selected_agent.role}", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER))
         chat_view.controls.append(ft.Divider())
 
-        # Load and display the chat history
+        # Load and display the filtered chat history
         for message in selected_agent.chat_history:
             speaker = message.get("speaker")
             text = message.get("text")
             mtype = message.get("type")
 
-            # Apply the same filtering logic as on_message
             if mtype == "user":
                 chat_view.controls.append(ft.Text(f"You: {text}", size=14, weight=ft.FontWeight.BOLD))
             elif mtype == "user_facing" or mtype == "system":
@@ -162,19 +150,13 @@ def main(page: ft.Page):
                 chat_view.controls.append(
                     ft.Text(f"{speaker}: {text}", size=14, italic=is_system, color="white50" if is_system else "white")
                 )
-            # All other message types (like 'agent' internal monologue and 'info') are now ignored when loading history.
-        
-        def scroll_async():
-            """Gives the UI a moment to render before scrolling."""
-            time.sleep(0.05) # A tiny delay
-            chat_view.scroll_to(offset=-1)
-            page.update()
-
-        # Update the page to draw the history, then run the scroll as a separate background task
         page.update()
-        page.run_thread(scroll_async)
 
-    # --- Build the UI Layout ---
+    # --- UI Controls Definition ---
+    chat_view = ft.ListView(expand=True, spacing=10, padding=20)
+    message_input = ft.TextField(hint_text="Type a message...", expand=True, on_submit=send_message)
+    send_button = ft.IconButton(icon="send_rounded", on_click=send_message)
+    
     agent_list_items = [
         ft.ListTile(
             leading=ft.Icon(name="person_outline"),
@@ -194,6 +176,7 @@ def main(page: ft.Page):
         spacing=10,
     )
 
+    # --- Final Layout ---
     page.add(
         ft.Row(
             controls=[
