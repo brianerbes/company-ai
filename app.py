@@ -81,7 +81,7 @@ def main(page: ft.Page):
     scheduler_thread = None
 
     # --- UI Controls ---
-    chat_view = ft.ListView(expand=True, auto_scroll=True, spacing=10, padding=20)
+    chat_view = ft.ListView(expand=True, spacing=10, padding=20)
     message_input = ft.TextField(hint_text="Type a message...", expand=True)
 
     def on_message(msg):
@@ -105,6 +105,7 @@ def main(page: ft.Page):
             color = "white"
         
         chat_view.controls.append(ft.Text(f"{agent_role}: {text}", size=14, italic=(mtype != "agent"), color=color))
+        chat_view.scroll_to(offset=-1, duration=100)
         page.update()
 
     page.pubsub.subscribe(on_message)
@@ -128,6 +129,7 @@ def main(page: ft.Page):
             scheduler_thread = threading.Thread(target=scheduler.run, daemon=True)
             scheduler_thread.start()
         
+        chat_view.scroll_to(offset=-1, duration=100)
         page.update()
 
     send_button = ft.IconButton(icon="send_rounded", on_click=send_message)
@@ -152,7 +154,9 @@ def main(page: ft.Page):
             else:
                 color = "white50" if mtype == "info" else "white"
                 chat_view.controls.append(ft.Text(f"{speaker}: {text}", size=14, italic=(mtype == "info"), color=color))
-
+        
+        # Scroll to the end instantly when loading history
+        chat_view.scroll_to(offset=-1)
         page.update()
 
     # --- Build the UI Layout ---
