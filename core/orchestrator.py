@@ -52,17 +52,19 @@ def recall_context(memory: "MemoryManager", payload: dict):
     results = memory.recall(query)
     return {"status": "success", "results": results}
 
-    def send_message_to_user(company: "Company", current_task: "Task", payload: dict):
+def send_message_to_user(company: "Company", current_task: "Task", payload: dict):
     """Tool to send a final, conversational message back to the user."""
     text = payload.get("text")
     if not text:
         return {"status": "error", "message": "Payload must include 'text'."}
 
     if company.pubsub and current_task.ui_channel:
+        # Look up the agent's role for the message
+        agent_role = company.agents[current_task.assignee_id].role
         company.pubsub.send_all({
             "text": text,
-            "type": "user_facing", # A new, specific message type
-            "agent": company.agents[current_task.assignee_id].role,
+            "type": "user_facing",
+            "agent": agent_role,
             "channel": current_task.ui_channel
         })
     return {"status": "success", "message": "Message sent to user."}
@@ -115,12 +117,11 @@ def execute_actions(actions: list, company: "Company", current_task: "Task"):
             result = {"status": "error", "message": f"Tool '{tool_name}' not found in registry."}
         else:
             try:
-                # Route the tool call to the correct service
                 if tool_name in ["MEMORIZE_THIS", "RECALL_CONTEXT"]:
                     result = tool_function(company.memory, payload)
                 elif tool_name in ["DELEGATE_TASK", "SEND_MESSAGE_TO_USER"]:
                     result = tool_function(company, current_task, payload)
-                else: # Default to filesystem tools
+                else:
                     result = tool_function(company.fs, payload)
             except Exception as e:
                 result = {"status": "fatal_error", "message": str(e)}
