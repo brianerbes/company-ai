@@ -75,9 +75,11 @@ def delegate_task(company: "Company", current_task: "Task", payload: dict):
     block_self = payload.get("block_self", False)
     if not assignee_id or not description: return {"status": "error", "message": "Payload must include 'assignee_id' and 'description'."}
     try:
-        new_task = company.create_task(description=description, assignee_id=assignee_id, ui_channel=current_task.ui_channel)
+        # Delegated tasks have no UI channel and work silently in the background
+        new_task = company.create_task(description=description, assignee_id=assignee_id, ui_channel=None)
         if block_self:
             current_task.dependencies.append(new_task.task_id)
+
             current_task.set_status(TaskStatus.BLOCKED, f"Blocked pending completion of sub-task {new_task.task_id[:8]}")
             return {"status": "success", "message": f"Task '{new_task.task_id}' delegated to '{assignee_id}'. Current task is now BLOCKED."}
         return {"status": "success", "message": f"Task '{new_task.task_id}' delegated to '{assignee_id}'."}

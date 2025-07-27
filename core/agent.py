@@ -65,8 +65,12 @@ class Agent:
         prompt = f"""
         You are an AI agent. Do not act as a user. Your Identity: {self.system_prompt}
         Your assigned task is: "{task.description}"
+
         {tool_manifest}
         {team_roster}
+
+        **CRUCIAL INSTRUCTION:** If the assigned task is a simple greeting, question, or comment, you MUST respond directly and conversationally using the `SEND_MESSAGE_TO_USER` tool. Do NOT delegate or use other tools unless the user explicitly asks you to perform a specific, complex action.
+
         **Planning Strategy:** If you use the DELEGATE_TASK tool with 'block_self' set to true, your plan for this turn should ONLY contain the delegation actions. You can read their work and assemble it in a future turn, after your task has been unblocked by the scheduler.
         Based on all the information above, you must formulate a plan. Your response MUST be a valid JSON object following this exact structure (do NOT output any other text, just the JSON):
         {said_format}
