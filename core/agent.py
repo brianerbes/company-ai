@@ -14,8 +14,8 @@ class Agent:
         self.id = agent_id
         self.meta = agent_meta
         self.company = company
-        self.chat_history: list[dict] = []
         self.fs = company.fs
+        self.chat_history: list[dict] = []
         self.role = self.meta.get('role', 'Generic Agent')
         self.system_prompt = self.meta.get('system_prompt', 'You are a helpful assistant.')
     
@@ -63,14 +63,12 @@ class Agent:
         tool_manifest = self._get_tool_manifest()
         team_roster = self._get_team_roster()
 
-        # --- CONTEXT SECTION ---
         delegator_context = ""
         if task.delegator_id == "OWNER":
             delegator_context = "This task comes directly from the Owner."
         else:
             delegator_role = self.company.agents.get(task.delegator_id, "an unknown agent").role
             delegator_context = f"This task was delegated to you by: {task.delegator_id} ({delegator_role})."
-        # --- END CONTEXT ---
 
         prompt = f"""
         You are an AI agent. Do not act as a user. Your Identity: {self.system_prompt}
@@ -80,10 +78,10 @@ class Agent:
         Your assigned task is: "{task.description}"
         {tool_manifest}
         {team_roster}
-
+        
         **CRUCIAL INSTRUCTION:** If the assigned task is a simple greeting, question, or comment, you MUST respond directly and conversationally using the `SEND_MESSAGE_TO_USER` tool. Do NOT delegate or use other tools unless the user explicitly asks you to perform a specific, complex action.
-
         **Planning Strategy:** When you use the `DELEGATE_TASK` tool, you MUST include `'block_self': true` in the payload to wait for the result. Your plan for that turn should ONLY contain delegation actions.
+        
         Based on all the information above, you must formulate a plan. Your response MUST be a valid JSON object following this exact structure (do NOT output any other text, just the JSON):
         {said_format}
         """
@@ -101,6 +99,7 @@ class Agent:
         history = ""
         for i, attempt in enumerate(previous_attempts):
             history += f"\n--- Attempt #{i+1} ---\nPlan: {json.dumps(attempt['plan'], indent=2)}\nExecution Results: {json.dumps(attempt['execution_results'], indent=2)}\nSelf-Critique: {attempt['critique']['critique']}\n------------------\n"
+        
         prompt = f"""
         You are an AI agent attempting to complete a task. You have tried before and failed. Use your previous self-critique to formulate a new, improved plan.
         Your Identity: {self.system_prompt}. The original task is: "{task.description}"
@@ -108,7 +107,6 @@ class Agent:
         Based on your critique, create a new plan.
         {tool_manifest}
         {team_roster}
-        
         **Planning Strategy:** When you use the `DELEGATE_TASK` tool, you MUST include `'block_self': true` in the payload to wait for the result. Your plan for that turn should ONLY contain delegation actions.
         Your new response MUST be a valid JSON object following this exact structure: {said_format}
         """
@@ -135,48 +133,73 @@ class Agent:
         def ui_message(text, msg_type="info"):
             if self.company.pubsub and task.ui_channel:
                 self.company.pubsub.send_all({
-                    "text": text, "type": msg_type, "agent": self.role, "channel": task.ui_channel
+                    "text": text,
+                    "type": msg_type,
+                    "agent": self.role,
+                    "channel": task.ui_channel
                 })
         
         ui_message(f"Processing Task {task.task_id[:8]}...")
         
-        task.iteration_count += 1
-        print(f"\n{'='*10} Starting Iteration #{task.iteration_count} {'='*10}")
+        max_iterations = 3
+        is_complete = False
+        while not is_complete and task.iteration_count < max_iterations:
+            task.iteration_count += 1
+            print(f"\n{'='*10} Starting Iteration #{task.iteration_count} {'='*10}")
 
-        # === 1. PLAN PHASE ===
-        ui_message(f"Starting Iteration #{task.iteration_count}: Planning...")
-        task.set_status(TaskStatus.IN_PROGRESS, f"Agent is planning.")
-        
-        plan_prompt = self._construct_initial_prompt(task)
-        
-        raw_plan_response = generate_structured_response(plan_prompt)
-        if not raw_plan_response:
-            task.set_status(TaskStatus.FAILED, "Agent failed to generate a plan.")
-            return
+            # === 1. PLAN PHASE ===
+            ui_message(f"Starting Iteration #{task.iteration_count}: Planning...")
+            task.set_status(TaskStatus.IN_PROGRESS, f"Agent is planning iteration {task.iteration_count}.")
+            if task.iteration_count == 1:
+                plan_prompt = self._construct_initial_prompt(task)
+            else:
+                plan_prompt = self._construct_iteration_prompt(task, task.previous_attempts)
+            
+            raw_plan_response = generate_structured_response(plan_prompt)
+            if not raw_plan_response:
+                task.set_status(TaskStatus.FAILED, "Agent failed to generate a plan.")
+                return
 
-        try:
-            plan = json.loads(raw_plan_response.strip().replace("```json", "").replace("```", ""))
-            ui_message(f"Plan: {plan.get('reasoning')}", msg_type="agent")
-        except json.JSONDecodeError:
-            task.set_status(TaskStatus.FAILED, f"Agent returned invalid JSON for its plan.")
-            return
-        
-        # === 2. EXECUTE PHASE ===
-        actions = plan.get('actions', [])
-        execution_results = execute_actions(actions, self.company, task) if actions else []
-        
-        # === 3. FINAL STATUS CHECK ===
-        if task.status == TaskStatus.BLOCKED:
-            # The agent has delegated and is now waiting. Its turn is over.
-            return
+            try:
+                plan = json.loads(raw_plan_response.strip().replace("```json", "").replace("```", ""))
+                ui_message(f"Plan: {plan.get('reasoning')}", msg_type="agent")
+            except json.JSONDecodeError:
+                task.set_status(TaskStatus.FAILED, f"Agent returned invalid JSON for its plan. Raw response: {raw_plan_response}")
+                return
+            
+            # === 2. EXECUTE PHASE ===
+            actions = plan.get('actions', [])
+            execution_results = execute_actions(actions, self.company, task) if actions else []
+            
+            if task.status == TaskStatus.BLOCKED:
+                ui_message(f"Task is now BLOCKED, waiting for dependencies. Ending turn.")
+                return
 
-        # Check if the agent sent a message during its execution.
-        message_sent = any(
-            action.get("tool_name") == "SEND_MESSAGE_TO_USER" for action in actions
-        )
+            # === 3. REFLECT PHASE ===
+            ui_message("Reflecting on the results...")
+            reflection_prompt = self._construct_reflection_prompt(task, plan, execution_results)
+            raw_reflection_response = generate_structured_response(reflection_prompt)
+            if not raw_reflection_response:
+                task.set_status(TaskStatus.FAILED, "Agent failed to generate a reflection.")
+                return
+            
+            try:
+                reflection = json.loads(raw_reflection_response.strip().replace("```json", "").replace("```", ""))
+                critique = reflection.get('critique', 'No critique provided.')
+                is_complete = reflection.get('is_complete', False)
+                ui_message(f"Critique: {critique}", msg_type="agent")
+                
+                if is_complete:
+                    task.set_status(TaskStatus.COMPLETED, f"Agent self-assessed as complete after {task.iteration_count} iteration(s).")
+                else:
+                    ui_message("Task is INCOMPLETE. Preparing for next iteration.")
+                    task.previous_attempts.append({
+                        "plan": plan, "execution_results": execution_results, "critique": reflection
+                    })
+            except json.JSONDecodeError:
+                task.set_status(TaskStatus.FAILED, f"Agent returned invalid JSON for its reflection. Raw response: {raw_reflection_response}")
+                return
 
-        # If no message was sent, send a default completion message.
-        if not message_sent:
-            ui_message("I have completed the task.", msg_type="user_facing")
-
-        task.set_status(TaskStatus.COMPLETED, "Agent finished its turn.")
+        if not is_complete:
+            ui_message(f"Failed to complete the task after {max_iterations} iterations.", msg_type="system")
+            task.set_status(TaskStatus.FAILED, f"Agent failed to complete task after {max_iterations} iterations.")

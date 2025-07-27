@@ -53,20 +53,11 @@ def recall_context(memory: "MemoryManager", payload: dict):
     return {"status": "success", "results": results}
 
 def send_message_to_user(company: "Company", current_task: "Task", payload: dict):
-    """Tool to send a final, conversational message back to the user."""
     text = payload.get("text")
-    if not text:
-        return {"status": "error", "message": "Payload must include 'text'."}
-
+    if not text: return {"status": "error", "message": "Payload must include 'text'."}
     if company.pubsub and current_task.ui_channel:
-        # Look up the agent's role for the message
         agent_role = company.agents[current_task.assignee_id].role
-        company.pubsub.send_all({
-            "text": text,
-            "type": "user_facing",
-            "agent": agent_role,
-            "channel": current_task.ui_channel
-        })
+        company.pubsub.send_all({"text": text, "type": "user_facing", "agent": agent_role, "channel": current_task.ui_channel})
     return {"status": "success", "message": "Message sent to user."}
 
 def delegate_task(company: "Company", current_task: "Task", payload: dict):
@@ -75,13 +66,10 @@ def delegate_task(company: "Company", current_task: "Task", payload: dict):
     block_self = payload.get("block_self", False)
     if not assignee_id or not description: return {"status": "error", "message": "Payload must include 'assignee_id' and 'description'."}
     try:
-        # The delegator of the new task is the agent performing the current task
         delegator_agent_id = current_task.assignee_id
-        # Delegated tasks have no UI channel and work silently in the background
         new_task = company.create_task(description=description, assignee_id=assignee_id, ui_channel=None, delegator_id=delegator_agent_id)
         if block_self:
             current_task.dependencies.append(new_task.task_id)
-
             current_task.set_status(TaskStatus.BLOCKED, f"Blocked pending completion of sub-task {new_task.task_id[:8]}")
             return {"status": "success", "message": f"Task '{new_task.task_id}' delegated to '{assignee_id}'. Current task is now BLOCKED."}
         return {"status": "success", "message": f"Task '{new_task.task_id}' delegated to '{assignee_id}'."}
