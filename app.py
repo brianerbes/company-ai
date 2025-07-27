@@ -5,6 +5,7 @@ import threading
 import json
 from core.company import Company, discover_companies
 from core.task import TaskStatus
+from core.llm_api import get_intent
 
 WORKSPACE_ROOT = Path(__file__).parent / "workspace"
 
@@ -80,7 +81,9 @@ def main(page: ft.Page):
     selected_agent = None
     scheduler_thread = None
 
-    # --- Event Handlers and UI Updaters ---
+    # --- UI Controls ---
+    chat_view = ft.ListView(expand=True, spacing=10, padding=20)
+    
     def on_message(msg):
         """PubSub handler to display messages from the backend."""
         msg_channel = msg.get("channel")
@@ -91,16 +94,13 @@ def main(page: ft.Page):
         text = msg.get("text", "")
         agent_role = msg.get("agent", "System")
         
-        # Determine the visual style of the message
-        is_user_facing = mtype == "user_facing"
-        is_system = mtype == "system"
-
         # Save all message types to history
         if selected_agent:
             selected_agent.chat_history.append({"speaker": agent_role, "text": text, "type": mtype})
         
         # Only show user-facing and system messages in the chat view
-        if is_user_facing or is_system:
+        if mtype == "user_facing" or mtype == "system":
+            is_system = mtype == "system"
             chat_view.controls.append(
                 ft.Text(f"{agent_role}: {text}", size=14, italic=is_system, color="white50" if is_system else "white")
             )
@@ -118,16 +118,36 @@ def main(page: ft.Page):
         selected_agent.chat_history.append({"speaker": "You", "text": user_message, "type": "user"})
         chat_view.controls.append(ft.Text(f"You: {user_message}", size=14, weight=ft.FontWeight.BOLD))
         message_input.value = ""
+        page.update()
+
+        # --- INTENT RECOGNITION STEP ---
+        intent_data = get_intent(user_message)
+        intent = intent_data.get("intent", "simple_chat")
+
+        task_description = ""
+        if intent == "simple_chat":
+            task_description = f"The user said: '{user_message}'. Respond with a simple, direct, conversational reply. Use the SEND_MESSAGE_TO_USER tool once and only once."
+        else:
+            task_description = intent_data.get("task_summary", user_message)
         
-        # Create a task and start the scheduler
-        active_company.create_task(description=user_message, assignee_id=selected_agent.id, ui_channel=selected_agent.id)
+        # Create a task based on the recognized intent
+        active_company.create_task(description=task_description, assignee_id=selected_agent.id, ui_channel=selected_agent.id)
         
+        # Start the scheduler if it's not already running
         if scheduler_thread is None or not scheduler_thread.is_alive():
             scheduler = Scheduler(company=active_company)
             scheduler_thread = threading.Thread(target=scheduler.run, daemon=True)
             scheduler_thread.start()
         
+        chat_view.scroll_to(offset=-1, duration=100)
         page.update()
+
+    message_input = ft.TextField(
+        hint_text="Type a message...",
+        expand=True,
+        on_submit=send_message
+    )
+    send_button = ft.IconButton(icon="send_rounded", on_click=send_message)
 
     def select_agent(e):
         nonlocal selected_agent
@@ -150,13 +170,11 @@ def main(page: ft.Page):
                 chat_view.controls.append(
                     ft.Text(f"{speaker}: {text}", size=14, italic=is_system, color="white50" if is_system else "white")
                 )
+        
         page.update()
+        page.run_thread(lambda: (time.sleep(0.05), chat_view.scroll_to(offset=-1), page.update()))
 
-    # --- UI Controls Definition ---
-    chat_view = ft.ListView(expand=True, spacing=10, padding=20)
-    message_input = ft.TextField(hint_text="Type a message...", expand=True, on_submit=send_message)
-    send_button = ft.IconButton(icon="send_rounded", on_click=send_message)
-    
+    # --- Build the UI Layout ---
     agent_list_items = [
         ft.ListTile(
             leading=ft.Icon(name="person_outline"),
@@ -176,7 +194,6 @@ def main(page: ft.Page):
         spacing=10,
     )
 
-    # --- Final Layout ---
     page.add(
         ft.Row(
             controls=[
@@ -194,8 +211,3 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.app(target=main)
-
-
-
-
-
