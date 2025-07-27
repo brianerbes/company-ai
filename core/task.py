@@ -20,6 +20,7 @@ class Task:
         # State memory for the agent's iterative process
         self.iteration_count: int = 0
         self.previous_attempts: list = []
+        self.ui_channel: str | None = None
         self.assignee_id: str = assignee_id
         self.delegator_id: str = delegator_id
         

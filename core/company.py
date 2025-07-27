@@ -8,12 +8,10 @@ from .task import Task
 from .memory import MemoryManager
 
 class Company:
-    """
-    Represents a single, loaded company instance.
-    """
-    def __init__(self, manifest_data: dict, company_path: Path):
+    def __init__(self, manifest_data: dict, company_path: Path, pubsub_handle=None):
         self.manifest = manifest_data
         self.path = company_path
+        self.pubsub = pubsub_handle
         self.name = manifest_data.get('identity', {}).get('name', 'Unnamed Company')
         self.fs = FileSystemManager(company_root=self.path)
         self.memory = MemoryManager(company_root=self.path) # <-- ADD THIS LINE
@@ -29,12 +27,13 @@ class Company:
         print(f"Vision: {self.manifest.get('identity', {}).get('vision', 'N/A')}")
         print(f"Path: {self.path}")
 
-    def create_task(self, description: str, assignee_id: str) -> Task:
+    def create_task(self, description: str, assignee_id: str, ui_channel: str = None) -> Task:
         """Creates a new task and adds it to the company's task registry."""
         if assignee_id not in self.agents:
             raise ValueError(f"Cannot assign task: Agent ID '{assignee_id}' not found.")
         
         new_task = Task(description=description, assignee_id=assignee_id)
+        new_task.ui_channel = ui_channel
         self.tasks[new_task.task_id] = new_task
         print(f"New task created and assigned to {assignee_id}: {new_task.task_id}")
         return new_task
