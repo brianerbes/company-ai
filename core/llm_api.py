@@ -45,10 +45,11 @@ MOCK_RESPONSES = {
         ]
     },
     "programmer_plan": {
-        "reasoning": "MOCK: My task is to design and document the API. I will create the file and write a detailed specification for all necessary endpoints.",
+        "reasoning": "MOCK: My task is to design the API. I will create the file, write the spec, and then inform the user that I am done.",
         "actions": [
             {"tool_name": "CREATE_FILE", "payload": {"path": "docs/api_spec.md"}},
-            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/api_spec.md", "content": "# MOCK API Specification\n\n- POST /tasks\n- GET /tasks/{id}\n"}}
+            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/api_spec.md", "content": "# MOCK API Specification\n\n- POST /tasks\n- GET /tasks/{id}\n"}},
+            {"tool_name": "SEND_MESSAGE_TO_USER", "payload": {"text": "I have completed the draft for the API specification. You can find it at 'docs/api_spec.md'."}}
         ]
     },
     "dba_plan": {

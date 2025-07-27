@@ -93,19 +93,22 @@ def main(page: ft.Page):
         mtype = msg.get("type", "info")
         text = msg.get("text", "")
         agent_role = msg.get("agent", "System")
+        
+        # Determine the visual style of the message
+        is_user_facing = mtype == "user_facing"
+        is_system = mtype == "system"
+        is_user = mtype == "user"
 
-        # Save the message to the agent's history
-        if selected_agent and mtype in ["agent", "info"]:
+        # Save all message types to history
+        if selected_agent:
             selected_agent.chat_history.append({"speaker": agent_role, "text": text, "type": mtype})
-
-        color = "white50"
-        if mtype == "agent":
-            color = "white"
         
-        chat_view.controls.append(ft.Text(f"{agent_role}: {text}", size=14, italic=(mtype != "agent"), color=color))
-        
-        # We no longer auto-scroll on incoming messages. The user is in control.
-        page.update()
+        # Only show user-facing and system messages in the chat view
+        if is_user_facing or is_system:
+            chat_view.controls.append(
+                ft.Text(f"{agent_role}: {text}", size=14, italic=is_system, color="white50" if is_system else "white")
+            )
+            page.update()
 
     page.pubsub.subscribe(on_message)
 
@@ -138,11 +141,9 @@ def main(page: ft.Page):
         selected_agent = e.control.data
         chat_view.controls.clear()
         
-        # Add a header for the conversation
         chat_view.controls.append(ft.Text(f"Conversation with {selected_agent.role}", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER))
         chat_view.controls.append(ft.Divider())
 
-        # Load and display the chat history
         for message in selected_agent.chat_history:
             speaker = message.get("speaker")
             text = message.get("text")
@@ -154,11 +155,15 @@ def main(page: ft.Page):
                 color = "white50" if mtype == "info" else "white"
                 chat_view.controls.append(ft.Text(f"{speaker}: {text}", size=14, italic=(mtype == "info"), color=color))
         
-        # Update the page to draw the history first
+        def scroll_async():
+            """Gives the UI a moment to render before scrolling."""
+            time.sleep(0.05) # A tiny delay
+            chat_view.scroll_to(offset=-1)
+            page.update()
+
+        # Update the page to draw the history, then run the scroll as a separate background task
         page.update()
-        # Then, scroll to the end instantly
-        chat_view.scroll_to(offset=-1)
-        page.update()
+        page.run_thread(scroll_async)
 
     # --- Build the UI Layout ---
     agent_list_items = [

@@ -29,12 +29,13 @@ class Agent:
     def _get_tool_manifest(self) -> str:
         tool_descriptions = {
             "CREATE_FILE": "Creates a new, empty file. Payload requires 'path'.",
-            "WRITE_FILE": "Writes or appends content to a file. Payload requires 'path' and 'content'. To append, include 'append': true in the payload.",
+            "WRITE_FILE": "Writes or appends content. Payload requires 'path' and 'content'. Optional: 'append': true.",
             "READ_FILE": "Reads a file's content. Payload requires 'path'.",
-            "LIST_FILES": "Lists files in a directory. Payload can optionally include a 'path', defaults to the company root.",
-            "DELEGATE_TASK": "Delegates a task to another agent. Payload requires 'assignee_id' and 'description'. To wait for the result, also include 'block_self': true.",
-            "MEMORIZE_THIS": "Adds text to your long-term memory. Payload requires 'text', and an optional 'metadata' dictionary.",
-            "RECALL_CONTEXT": "Searches your long-term memory based on a query. Payload requires 'query'."
+            "LIST_FILES": "Lists files in a directory. Optional payload: 'path'.",
+            "DELEGATE_TASK": "Delegates a task to another agent. Payload requires 'assignee_id', 'description'. Optional: 'block_self': true.",
+            "MEMORIZE_THIS": "Adds text to long-term memory. Payload requires 'text', and an optional 'metadata' dictionary.",
+            "RECALL_CONTEXT": "Searches long-term memory. Payload requires 'query'.",
+            "SEND_MESSAGE_TO_USER": "Sends a conversational message back to the user in the chat UI. This should be your final action. Payload requires 'text'."
         }
         available_tools = self.meta.get('capabilities', {}).get('allowed_tools', [])
         manifest = "Your available tools and their required parameters are:\n"

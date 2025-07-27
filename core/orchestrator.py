@@ -52,6 +52,21 @@ def recall_context(memory: "MemoryManager", payload: dict):
     results = memory.recall(query)
     return {"status": "success", "results": results}
 
+    def send_message_to_user(company: "Company", current_task: "Task", payload: dict):
+    """Tool to send a final, conversational message back to the user."""
+    text = payload.get("text")
+    if not text:
+        return {"status": "error", "message": "Payload must include 'text'."}
+
+    if company.pubsub and current_task.ui_channel:
+        company.pubsub.send_all({
+            "text": text,
+            "type": "user_facing", # A new, specific message type
+            "agent": company.agents[current_task.assignee_id].role,
+            "channel": current_task.ui_channel
+        })
+    return {"status": "success", "message": "Message sent to user."}
+
 def delegate_task(company: "Company", current_task: "Task", payload: dict):
     assignee_id = payload.get("assignee_id")
     description = payload.get("description")
@@ -76,6 +91,7 @@ TOOL_REGISTRY = {
     "DELEGATE_TASK": delegate_task,
     "MEMORIZE_THIS": memorize_this,
     "RECALL_CONTEXT": recall_context,
+    "SEND_MESSAGE_TO_USER": send_message_to_user,
 }
 
 # --- Orchestrator Execution Engine ---
@@ -99,11 +115,12 @@ def execute_actions(actions: list, company: "Company", current_task: "Task"):
             result = {"status": "error", "message": f"Tool '{tool_name}' not found in registry."}
         else:
             try:
+                # Route the tool call to the correct service
                 if tool_name in ["MEMORIZE_THIS", "RECALL_CONTEXT"]:
                     result = tool_function(company.memory, payload)
-                elif tool_name == "DELEGATE_TASK":
+                elif tool_name in ["DELEGATE_TASK", "SEND_MESSAGE_TO_USER"]:
                     result = tool_function(company, current_task, payload)
-                else:
+                else: # Default to filesystem tools
                     result = tool_function(company.fs, payload)
             except Exception as e:
                 result = {"status": "fatal_error", "message": str(e)}
