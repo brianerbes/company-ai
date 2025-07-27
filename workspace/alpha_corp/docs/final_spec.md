@@ -1,3 +1,1 @@
 # MOCK FINAL SPECIFICATION
-
-Assembled by the CTO.

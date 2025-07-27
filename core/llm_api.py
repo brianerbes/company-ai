@@ -73,7 +73,12 @@ def _get_mock_response(prompt: str) -> str:
         return json.dumps(MOCK_RESPONSES["reflection_complete"])
 
     # --- Planning Logic ---
-    task_description = prompt_lower.split("your assigned task is:")[1].split("your available tools are:")[0]
+    # This parser now understands both the initial prompt and the iteration prompt
+    task_description = ""
+    if "your assigned task is:" in prompt_lower:
+        task_description = prompt_lower.split("your assigned task is:")[1].split("your available tools are:")[0]
+    elif "the original task is:" in prompt_lower:
+        task_description = prompt_lower.split("the original task is:")[1].split("review your previous attempts:")[0]
 
     if "you are the chief technology officer" in prompt_lower:
         if "oversee" in task_description or "specification" in task_description:
