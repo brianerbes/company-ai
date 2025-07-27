@@ -94,6 +94,12 @@ def main(page: ft.Page):
         text = msg.get("text", "")
         agent_role = msg.get("agent", "System")
 
+        # Save the message to the agent's history
+        if selected_agent and mtype in ["agent", "info"]:
+            selected_agent.chat_history.append({"speaker": agent_role, "text": text, "type": mtype})
+        text = msg.get("text", "")
+        agent_role = msg.get("agent", "System")
+
         color = "white50"
         if mtype == "agent":
             color = "white"
@@ -108,6 +114,9 @@ def main(page: ft.Page):
         user_message = message_input.value
         if not user_message or not selected_agent:
             return
+
+        # Save the user's message to the history
+        selected_agent.chat_history.append({"speaker": "You", "text": user_message, "type": "user"})
 
         chat_view.controls.append(ft.Text(f"You: {user_message}", size=14, weight=ft.FontWeight.BOLD))
         message_input.value = ""
@@ -127,8 +136,23 @@ def main(page: ft.Page):
         nonlocal selected_agent
         selected_agent = e.control.data
         chat_view.controls.clear()
+        
+        # Add a header for the conversation
         chat_view.controls.append(ft.Text(f"Conversation with {selected_agent.role}", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER))
         chat_view.controls.append(ft.Divider())
+
+        # Load and display the chat history
+        for message in selected_agent.chat_history:
+            speaker = message.get("speaker")
+            text = message.get("text")
+            mtype = message.get("type")
+
+            if speaker == "You":
+                chat_view.controls.append(ft.Text(f"You: {text}", size=14, weight=ft.FontWeight.BOLD))
+            else:
+                color = "white50" if mtype == "info" else "white"
+                chat_view.controls.append(ft.Text(f"{speaker}: {text}", size=14, italic=(mtype == "info"), color=color))
+
         page.update()
 
     # --- Build the UI Layout ---

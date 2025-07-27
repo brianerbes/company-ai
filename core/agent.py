@@ -14,6 +14,7 @@ class Agent:
         self.id = agent_id
         self.meta = agent_meta
         self.company = company
+        self.chat_history: list[dict] = []
         self.fs = company.fs
         self.role = self.meta.get('role', 'Generic Agent')
         self.system_prompt = self.meta.get('system_prompt', 'You are a helpful assistant.')
