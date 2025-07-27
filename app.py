@@ -28,7 +28,8 @@ class Scheduler:
                 # 1. Un-block tasks
                 for task in list(self.company.tasks.values()):
                     if task.status == TaskStatus.BLOCKED:
-                        if all(self.company.tasks.get(dep_id, t).status == TaskStatus.COMPLETED for dep_id in task.dependencies):
+                        # Check if all dependencies for this task are now complete
+                        if all(dep_id in self.company.tasks and self.company.tasks[dep_id].status == TaskStatus.COMPLETED for dep_id in task.dependencies):
                             task.set_status(TaskStatus.PENDING, f"All dependencies complete.")
 
                 # 2. Find and execute a runnable task
@@ -40,7 +41,6 @@ class Scheduler:
                     if agent:
                         agent.process_task(task_to_run)
                 
-                # Prevent busy-waiting
                 time.sleep(1)
 
             except Exception as e:
@@ -69,7 +69,7 @@ def main(page: ft.Page):
     # --- Create and start the single, persistent scheduler ---
     scheduler = Scheduler(company=active_company)
     scheduler.start()
-    page.window_destroy = lambda e: scheduler.stop() # Stop scheduler when window closes
+    page.window_destroy = lambda e: scheduler.stop()
 
     # --- App State ---
     selected_agent = None
@@ -104,7 +104,6 @@ def main(page: ft.Page):
         chat_view.controls.append(ft.Text(f"You: {user_message}", size=14, weight=ft.FontWeight.BOLD))
         message_input.value = ""
         
-        # Simply add a new task to the queue. The running scheduler will pick it up.
         active_company.create_task(description=user_message, assignee_id=selected_agent.id, ui_channel=selected_agent.id)
         page.update()
 
