@@ -29,10 +29,10 @@ class Agent:
     def _get_tool_manifest(self) -> str:
         tool_descriptions = {
             "CREATE_FILE": "Creates a new, empty file. Payload requires 'path'.",
-            "WRITE_FILE": "Writes or appends content. Payload requires 'path' and 'content'. Optional: 'append': true.",
+            "WRITE_FILE": "Writes or appends content to a file. Payload requires 'path' and 'content'. Optional: 'append': true.",
             "READ_FILE": "Reads a file's content. Payload requires 'path'.",
             "LIST_FILES": "Lists files in a directory. Optional payload: 'path'.",
-            "DELEGATE_TASK": "Delegates a task to another agent. Payload requires 'assignee_id', 'description'. Optional: 'block_self': true.",
+            "DELEGATE_TASK": "Delegates a task to another agent. CRUCIAL: To wait for the result, you MUST include 'block_self': true in the payload.",
             "MEMORIZE_THIS": "Adds text to long-term memory. Payload requires 'text', and an optional 'metadata' dictionary.",
             "RECALL_CONTEXT": "Searches long-term memory. Payload requires 'query'.",
             "SEND_MESSAGE_TO_USER": "Sends a conversational message back to the user in the chat UI. This should be your final action. Payload requires 'text'."
@@ -71,7 +71,7 @@ class Agent:
 
         **CRUCIAL INSTRUCTION:** If the assigned task is a simple greeting, question, or comment, you MUST respond directly and conversationally using the `SEND_MESSAGE_TO_USER` tool. Do NOT delegate or use other tools unless the user explicitly asks you to perform a specific, complex action.
 
-        **Planning Strategy:** If you use the DELEGATE_TASK tool with 'block_self' set to true, your plan for this turn should ONLY contain the delegation actions. You can read their work and assemble it in a future turn, after your task has been unblocked by the scheduler.
+        **Planning Strategy:** When you use the `DELEGATE_TASK` tool, you MUST include `'block_self': true` in the payload to wait for the result. Your plan for that turn should ONLY contain delegation actions.
         Based on all the information above, you must formulate a plan. Your response MUST be a valid JSON object following this exact structure (do NOT output any other text, just the JSON):
         {said_format}
         """
@@ -96,7 +96,8 @@ class Agent:
         Based on your critique, create a new plan.
         {tool_manifest}
         {team_roster}
-        **Planning Strategy:** If you use the DELEGATE_TASK tool with 'block_self' set to true, your plan for this turn should ONLY contain the delegation actions. You can read their work and assemble it in a future turn, after your task has been unblocked by the scheduler.
+        
+        **Planning Strategy:** When you use the `DELEGATE_TASK` tool, you MUST include `'block_self': true` in the payload to wait for the result. Your plan for that turn should ONLY contain delegation actions.
         Your new response MUST be a valid JSON object following this exact structure: {said_format}
         """
         return prompt
