@@ -97,15 +97,14 @@ def main(page: ft.Page):
         # Save the message to the agent's history
         if selected_agent and mtype in ["agent", "info"]:
             selected_agent.chat_history.append({"speaker": agent_role, "text": text, "type": mtype})
-        text = msg.get("text", "")
-        agent_role = msg.get("agent", "System")
 
         color = "white50"
         if mtype == "agent":
             color = "white"
         
         chat_view.controls.append(ft.Text(f"{agent_role}: {text}", size=14, italic=(mtype != "agent"), color=color))
-        chat_view.scroll_to(offset=-1, duration=100)
+        
+        # We no longer auto-scroll on incoming messages. The user is in control.
         page.update()
 
     page.pubsub.subscribe(on_message)
@@ -155,7 +154,9 @@ def main(page: ft.Page):
                 color = "white50" if mtype == "info" else "white"
                 chat_view.controls.append(ft.Text(f"{speaker}: {text}", size=14, italic=(mtype == "info"), color=color))
         
-        # Scroll to the end instantly when loading history
+        # Update the page to draw the history first
+        page.update()
+        # Then, scroll to the end instantly
         chat_view.scroll_to(offset=-1)
         page.update()
 
