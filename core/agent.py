@@ -140,7 +140,6 @@ class Agent:
         
         ui_message(f"Processing Task {task.task_id[:8]}...")
         
-        # We will attempt just one plan-execute cycle to reduce API calls.
         task.iteration_count += 1
         print(f"\n{'='*10} Starting Iteration #{task.iteration_count} {'='*10}")
 
@@ -148,7 +147,6 @@ class Agent:
         ui_message(f"Starting Iteration #{task.iteration_count}: Planning...")
         task.set_status(TaskStatus.IN_PROGRESS, f"Agent is planning.")
         
-        # For now, we only use the initial prompt as we won't be iterating.
         plan_prompt = self._construct_initial_prompt(task)
         
         raw_plan_response = generate_structured_response(plan_prompt)
@@ -167,8 +165,18 @@ class Agent:
         actions = plan.get('actions', [])
         execution_results = execute_actions(actions, self.company, task) if actions else []
         
-        # === 3. REFLECTION PHASE (DISABLED) ===
-        # We now assume the agent's plan is good enough for the first try.
-        # This reduces API calls from 2 to 1 per turn.
-        if task.status != TaskStatus.BLOCKED:
-            task.set_status(TaskStatus.COMPLETED, "Agent finished its turn.")
+        # === 3. FINAL STATUS CHECK ===
+        if task.status == TaskStatus.BLOCKED:
+            # The agent has delegated and is now waiting. Its turn is over.
+            return
+
+        # Check if the agent sent a message during its execution.
+        message_sent = any(
+            action.get("tool_name") == "SEND_MESSAGE_TO_USER" for action in actions
+        )
+
+        # If no message was sent, send a default completion message.
+        if not message_sent:
+            ui_message("I have completed the task.", msg_type="user_facing")
+
+        task.set_status(TaskStatus.COMPLETED, "Agent finished its turn.")
