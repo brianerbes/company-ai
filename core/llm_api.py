@@ -89,6 +89,15 @@ MOCK_RESPONSES = {
             },
         ]
     },
+    "simple_chat_plan": {
+        "reasoning": "MOCK: The user sent a simple message. I will respond with a polite and helpful greeting.",
+        "actions": [
+            {
+                "tool_name": "SEND_MESSAGE_TO_USER",
+                "payload": {"text": "Hello! As the [Agent Role], how can I help you today?"}
+            }
+        ]
+    },
     "reflection_incomplete_delegated": {
         "critique": "MOCK: I have successfully delegated the sub-tasks for the API and database design. My own work is now blocked pending their completion. The task is therefore not complete.",
         "is_complete": False
@@ -105,33 +114,36 @@ def _get_mock_response(prompt: str) -> str:
     """
     print("  -> MOCK MODE: Generating mock response...")
     prompt_lower = prompt.lower()
-    
-    # Use the unique system prompt text to identify the agent and its task
-    if "you are the chief technology officer" in prompt_lower:
-        if "reflect on your work" in prompt_lower:
-            # If the CTO just delegated, the critique should say it's incomplete
-            if any("delegate_task" in str(action).lower() for action in prompt.split("actions")[1]):
-                return json.dumps(MOCK_RESPONSES["reflection_incomplete_delegated"])
-            else: # Otherwise, the final assembly is complete
-                 return json.dumps(MOCK_RESPONSES["reflection_complete"])
 
+    # --- Reflection Logic (Unchanged) ---
+    if "reflect on your work" in prompt_lower:
+        if "chief technology officer" in prompt_lower and "delegate_task" in prompt.lower():
+             return json.dumps(MOCK_RESPONSES["reflection_incomplete_delegated"])
+        return json.dumps(MOCK_RESPONSES["reflection_complete"])
+
+    # --- Planning Logic (Updated for direct chat) ---
+    if "you are the chief technology officer" in prompt_lower:
         if "review your previous attempts" in prompt_lower:
             return json.dumps(MOCK_RESPONSES["cto_plan_assemble"])
-        else:
+        else: # Initial task for CTO is always delegation
             return json.dumps(MOCK_RESPONSES["cto_plan_delegate"])
             
-    # For other agents, the reflection is always complete for now
-    elif "reflect on your work" in prompt_lower:
-        return json.dumps(MOCK_RESPONSES["reflection_complete"])
-        
     elif "you are the lead programmer" in prompt_lower:
-        return json.dumps(MOCK_RESPONSES["programmer_plan"])
+        # If the task is the specific delegated one, use the complex plan
+        if "design the restful api" in prompt_lower:
+            return json.dumps(MOCK_RESPONSES["programmer_plan"])
+        else: # Otherwise, use the simple chat plan
+            return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
         
     elif "you are the database architect" in prompt_lower:
-        return json.dumps(MOCK_RESPONSES["dba_plan"])
+        # If the task is the specific delegated one, use the complex plan
+        if "design the database schema" in prompt_lower:
+            return json.dumps(MOCK_RESPONSES["dba_plan"])
+        else: # Otherwise, use the simple chat plan
+            return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
 
-    # Default fallback if no specific prompt is matched
-    return json.dumps(MOCK_RESPONSES["reflection_complete"])
+    # Default fallback
+    return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
 
 # --- Main API Function ---
 def generate_structured_response(prompt: str) -> str | None:
