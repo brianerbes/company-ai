@@ -1,12 +1,41 @@
 import os
 import time
 import json
+from collections import deque
 import google.generativeai as genai
 from dotenv import load_dotenv
 
 # --- Configuration ---
 load_dotenv()
 MOCK_MODE = os.getenv("MOCK_MODE", "False").lower() in ('true', '1', 't')
+
+# --- NEW: API Rate Limiter ---
+class APIRateLimiter:
+    """A simple client-side rate limiter to stay within API quotas."""
+    def __init__(self, max_requests: int, per_seconds: int):
+        self.max_requests = max_requests
+        self.per_seconds = per_seconds
+        self.request_timestamps = deque()
+
+    def wait_if_needed(self):
+        """Checks recent requests and waits if the rate limit is exceeded."""
+        now = time.monotonic()
+        
+        while self.request_timestamps and self.request_timestamps[0] <= now - self.per_seconds:
+            self.request_timestamps.popleft()
+            
+        if len(self.request_timestamps) >= self.max_requests:
+            oldest_request_time = self.request_timestamps[0]
+            time_to_wait = oldest_request_time - (now - self.per_seconds)
+            
+            if time_to_wait > 0:
+                print(f"--- Rate Limiter: Pausing for {time_to_wait:.2f} seconds to stay within quota. ---")
+                time.sleep(time_to_wait)
+        
+        self.request_timestamps.append(time.monotonic())
+
+# --- Initialize the Limiter ---
+rate_limiter = APIRateLimiter(max_requests=10, per_seconds=60)
 
 print(f"--- MOCK MODE status: {MOCK_MODE} ---")
 
@@ -68,49 +97,6 @@ MOCK_RESPONSES = {
     }
 }
 
-def _get_mock_response(prompt: str) -> str:
-    """Selects an appropriate mock response based on the agent and task."""
-    print("  -> MOCK MODE: Generating mock response...")
-    prompt_lower = prompt.lower()
-
-    # --- Reflection Logic ---
-    if "reflect on your work" in prompt_lower:
-        if "chief technology officer" in prompt_lower and "delegate_task" in prompt.lower():
-             return json.dumps(MOCK_RESPONSES["reflection_incomplete"])
-        return json.dumps(MOCK_RESPONSES["reflection_complete"])
-
-    # --- Planning Logic ---
-    # This parser now understands both the initial prompt and the iteration prompt
-    task_description = ""
-    if "your assigned task is:" in prompt_lower:
-        task_description = prompt_lower.split("your assigned task is:")[1].split("your available tools are:")[0]
-    elif "the original task is:" in prompt_lower:
-        task_description = prompt_lower.split("the original task is:")[1].split("review your previous attempts:")[0]
-
-    if "you are the chief technology officer" in prompt_lower:
-        if "oversee" in task_description or "specification" in task_description:
-            if "review your previous attempts" in prompt_lower:
-                return json.dumps(MOCK_RESPONSES["cto_plan_assemble"])
-            else:
-                return json.dumps(MOCK_RESPONSES["cto_plan_delegate"])
-        else:
-            return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
-            
-    elif "you are the lead programmer" in prompt_lower:
-        if "design the restful api" in task_description:
-            return json.dumps(MOCK_RESPONSES["programmer_plan"])
-        else:
-
-            return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
-        
-    elif "you are the database architect" in prompt_lower:
-        if "design the database schema" in task_description:
-            return json.dumps(MOCK_RESPONSES["dba_plan"])
-        else:
-            return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
-
-    return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
-
 def get_intent(user_message: str) -> dict:
     """
     Uses a lightweight LLM call to determine the user's intent.
@@ -136,23 +122,67 @@ def get_intent(user_message: str) -> dict:
     try:
         return json.loads(raw_response)
     except (json.JSONDecodeError, TypeError):
-        # Default to simple chat if the response is invalid
         return {"intent": "simple_chat"}
 
-# --- Main API Function ---
+def _get_mock_response(prompt: str) -> str:
+    """Selects an appropriate mock response based on the agent and task."""
+    print("  -> MOCK MODE: Generating mock response...")
+    prompt_lower = prompt.lower()
+
+    if "reflect on your work" in prompt_lower:
+        if "chief technology officer" in prompt_lower and "delegate_task" in prompt.lower():
+             return json.dumps(MOCK_RESPONSES["reflection_incomplete"])
+        return json.dumps(MOCK_RESPONSES["reflection_complete"])
+
+    task_description = ""
+    if "your assigned task is:" in prompt_lower:
+        task_description = prompt_lower.split("your assigned task is:")[1].split("your available tools are:")[0]
+    elif "the original task is:" in prompt_lower:
+        task_description = prompt_lower.split("the original task is:")[1].split("review your previous attempts:")[0]
+
+    if "you are the chief technology officer" in prompt_lower:
+        if "oversee" in task_description or "specification" in task_description:
+            if "review your previous attempts" in prompt_lower:
+                return json.dumps(MOCK_RESPONSES["cto_plan_assemble"])
+            else:
+                return json.dumps(MOCK_RESPONSES["cto_plan_delegate"])
+        else:
+            return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
+            
+    elif "you are the lead programmer" in prompt_lower:
+        if "design the restful api" in task_description:
+            return json.dumps(MOCK_RESPONSES["programmer_plan"])
+        else:
+            return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
+        
+    elif "you are the database architect" in prompt_lower:
+        if "design the database schema" in task_description:
+            return json.dumps(MOCK_RESPONSES["dba_plan"])
+        else:
+            return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
+
+    return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
+
 def generate_structured_response(prompt: str) -> str | None:
+    """
+    Main function to get a response. Switches between real and mock mode,
+    and now includes both client-side rate limiting and server-side error retries.
+    """
     if MOCK_MODE:
         return _get_mock_response(prompt)
+
+    rate_limiter.wait_if_needed()
     
     max_retries = 3
     for attempt in range(max_retries):
         try:
+            print("--- Calling Gemini API... ---")
             response = model.generate_content(prompt)
             return response.text
         except Exception as e:
             if "429" in str(e):
                 wait_time = 5 * (attempt + 1)
-                print(f"  -> WARNING: Rate limit exceeded. Waiting for {wait_time}s... (Attempt {attempt + 1}/{max_retries})")
+                print(f"  -> WARNING: Server responded with 429 Rate Limit. Retrying in {wait_time}s... (Attempt {attempt + 1}/{max_retries})")
                 time.sleep(wait_time)
                 continue
             else:

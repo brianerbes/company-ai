@@ -27,12 +27,12 @@ class Company:
         print(f"Vision: {self.manifest.get('identity', {}).get('vision', 'N/A')}")
         print(f"Path: {self.path}")
 
-    def create_task(self, description: str, assignee_id: str, ui_channel: str = None) -> Task:
+    def create_task(self, description: str, assignee_id: str, ui_channel: str = None, delegator_id: str = "OWNER") -> Task:
         """Creates a new task and adds it to the company's task registry."""
         if assignee_id not in self.agents:
             raise ValueError(f"Cannot assign task: Agent ID '{assignee_id}' not found.")
         
-        new_task = Task(description=description, assignee_id=assignee_id)
+        new_task = Task(description=description, assignee_id=assignee_id, delegator_id=delegator_id)
         new_task.ui_channel = ui_channel
         self.tasks[new_task.task_id] = new_task
         print(f"New task created and assigned to {assignee_id}: {new_task.task_id}")

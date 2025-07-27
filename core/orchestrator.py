@@ -75,8 +75,10 @@ def delegate_task(company: "Company", current_task: "Task", payload: dict):
     block_self = payload.get("block_self", False)
     if not assignee_id or not description: return {"status": "error", "message": "Payload must include 'assignee_id' and 'description'."}
     try:
+        # The delegator of the new task is the agent performing the current task
+        delegator_agent_id = current_task.assignee_id
         # Delegated tasks have no UI channel and work silently in the background
-        new_task = company.create_task(description=description, assignee_id=assignee_id, ui_channel=None)
+        new_task = company.create_task(description=description, assignee_id=assignee_id, ui_channel=None, delegator_id=delegator_agent_id)
         if block_self:
             current_task.dependencies.append(new_task.task_id)
 

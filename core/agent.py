@@ -62,10 +62,22 @@ class Agent:
         """
         tool_manifest = self._get_tool_manifest()
         team_roster = self._get_team_roster()
+
+        # --- CONTEXT SECTION ---
+        delegator_context = ""
+        if task.delegator_id == "OWNER":
+            delegator_context = "This task comes directly from the Owner."
+        else:
+            delegator_role = self.company.agents.get(task.delegator_id, "an unknown agent").role
+            delegator_context = f"This task was delegated to you by: {task.delegator_id} ({delegator_role})."
+        # --- END CONTEXT ---
+
         prompt = f"""
         You are an AI agent. Do not act as a user. Your Identity: {self.system_prompt}
-        Your assigned task is: "{task.description}"
+        
+        CONTEXT: {delegator_context}
 
+        Your assigned task is: "{task.description}"
         {tool_manifest}
         {team_roster}
 
