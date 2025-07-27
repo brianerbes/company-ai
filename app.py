@@ -2,60 +2,52 @@ import flet as ft
 from pathlib import Path
 import time
 import threading
+import json
 from core.company import Company, discover_companies
 from core.task import TaskStatus
 
 WORKSPACE_ROOT = Path(__file__).parent / "workspace"
 
-# --- SCHEDULER CLASS ---
+# --- THE SINGLETON SCHEDULER ---
 class Scheduler:
     def __init__(self, company: Company):
         self.company = company
+        self.is_running = True
+        self.thread = threading.Thread(target=self.run, daemon=True)
+
+    def start(self):
+        self.thread.start()
+
+    def stop(self):
         self.is_running = False
 
     def run(self):
-        self.is_running = True
-        print("--- Starting Main Scheduler Loop ---")
-        
-        MAX_SCHEDULER_CYCLES = 10
-        cycles = 0
-        while cycles < MAX_SCHEDULER_CYCLES and self.is_running:
-            cycles += 1
-            print(f"\n{'='*15} Scheduler Cycle {cycles} {'='*15}")
+        print("--- Main Scheduler Loop Started ---")
+        while self.is_running:
+            try:
+                # 1. Un-block tasks
+                for task in list(self.company.tasks.values()):
+                    if task.status == TaskStatus.BLOCKED:
+                        if all(self.company.tasks.get(dep_id, t).status == TaskStatus.COMPLETED for dep_id in task.dependencies):
+                            task.set_status(TaskStatus.PENDING, f"All dependencies complete.")
 
-            # 1. Un-block tasks
-            for task in self.company.tasks.values():
-                if task.status == TaskStatus.BLOCKED:
-                    if all(self.company.tasks.get(dep_id).status == TaskStatus.COMPLETED for dep_id in task.dependencies):
-                        task.set_status(TaskStatus.PENDING, f"All dependencies complete.")
-
-            # 2. Find and execute runnable tasks
-            runnable_tasks = [t for t in self.company.tasks.values() if t.status == TaskStatus.PENDING]
-            
-            if not runnable_tasks:
-                print("No runnable tasks found in this cycle.")
-                if all(t.status in [TaskStatus.COMPLETED, TaskStatus.FAILED] for t in self.company.tasks.values()):
-                    print("All tasks are completed or failed. Shutting down scheduler.")
-                    self.is_running = False
-                    if self.company.pubsub:
-                        self.company.pubsub.send_all({"text": "All tasks complete. Scheduler finished.", "type": "system"})
-                    break
+                # 2. Find and execute a runnable task
+                runnable_tasks = [t for t in self.company.tasks.values() if t.status == TaskStatus.PENDING]
+                
+                if runnable_tasks:
+                    task_to_run = runnable_tasks[0] # Process one task per cycle
+                    agent = self.company.agents.get(task_to_run.assignee_id)
+                    if agent:
+                        agent.process_task(task_to_run)
+                
+                # Prevent busy-waiting
                 time.sleep(1)
-                continue
 
-            print(f"Found {len(runnable_tasks)} runnable task(s).")
-            for task in runnable_tasks:
-                if not self.is_running: break
-                agent = self.company.agents.get(task.assignee_id)
-                if agent:
-                    agent.process_task(task)
-                    print(f"--- Short delay after {agent.role}'s turn ---")
-                    time.sleep(1) 
-                else:
-                    task.set_status(TaskStatus.FAILED, f"Assignee '{task.assignee_id}' not found.")
+            except Exception as e:
+                print(f"FATAL ERROR in scheduler loop: {e}")
+                time.sleep(5)
         
         print("\n--- Scheduler Finished ---")
-        self.is_running = False
 
 # --- MAIN FLET APP ---
 def main(page: ft.Page):
@@ -74,17 +66,18 @@ def main(page: ft.Page):
     active_company = Company(selected_manifest, company_path, pubsub_handle=page.pubsub)
     active_company.load_agents()
 
+    # --- Create and start the single, persistent scheduler ---
+    scheduler = Scheduler(company=active_company)
+    scheduler.start()
+    page.window_destroy = lambda e: scheduler.stop() # Stop scheduler when window closes
+
     # --- App State ---
     selected_agent = None
-    scheduler_thread = None
 
-    # --- UI Controls ---
-    chat_view = ft.ListView(expand=True, spacing=10, padding=20)
-    message_input = ft.TextField(hint_text="Type a message...", expand=True, on_submit=lambda e: send_message(e.control.value))
-    send_button = ft.IconButton(icon="send_rounded", on_click=lambda e: send_message(message_input.value))
+    # --- UI Controls & Handlers ---
+    chat_view = ft.ListView(expand=True, spacing=10, padding=20, auto_scroll=True)
 
     def on_message(msg):
-        """PubSub handler to display messages from the backend."""
         msg_channel = msg.get("channel")
         if not selected_agent or (msg_channel and msg_channel != selected_agent.id):
             return
@@ -104,7 +97,6 @@ def main(page: ft.Page):
     page.pubsub.subscribe(on_message)
 
     def send_message(user_message: str):
-        nonlocal selected_agent, scheduler_thread
         if not user_message or not selected_agent:
             return
 
@@ -112,14 +104,12 @@ def main(page: ft.Page):
         chat_view.controls.append(ft.Text(f"You: {user_message}", size=14, weight=ft.FontWeight.BOLD))
         message_input.value = ""
         
+        # Simply add a new task to the queue. The running scheduler will pick it up.
         active_company.create_task(description=user_message, assignee_id=selected_agent.id, ui_channel=selected_agent.id)
-        
-        if scheduler_thread is None or not scheduler_thread.is_alive():
-            scheduler = Scheduler(company=active_company)
-            scheduler_thread = threading.Thread(target=scheduler.run, daemon=True)
-            scheduler_thread.start()
-        
         page.update()
+
+    message_input = ft.TextField(hint_text="Type a message...", expand=True, on_submit=lambda e: send_message(e.control.value))
+    send_button = ft.IconButton(icon="send_rounded", on_click=lambda e: send_message(message_input.value))
 
     def select_agent(e):
         nonlocal selected_agent
@@ -139,9 +129,7 @@ def main(page: ft.Page):
             elif mtype == "user_facing" or mtype == "system":
                 is_system = mtype == "system"
                 chat_view.controls.append(ft.Text(f"{speaker}: {text}", size=14, italic=is_system, color="white50" if is_system else "white"))
-        
         page.update()
-        page.run_thread(lambda: (time.sleep(0.1), chat_view.scroll_to(offset=-1, duration=100), page.update()))
 
     # --- Build the UI Layout ---
     agent_list_items = [ft.ListTile(leading=ft.Icon(name="person_outline"), title=ft.Text(agent.role), subtitle=ft.Text(agent_id, size=10), on_click=select_agent, data=agent) for agent_id, agent in active_company.agents.items()]
