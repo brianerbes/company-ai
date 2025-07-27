@@ -94,7 +94,7 @@ MOCK_RESPONSES = {
         "actions": [
             {
                 "tool_name": "SEND_MESSAGE_TO_USER",
-                "payload": {"text": "Hello! As the [Agent Role], how can I help you today?"}
+                "payload": {"text": "Hello! How can I help you today?"}
             }
         ]
     },
@@ -121,12 +121,16 @@ def _get_mock_response(prompt: str) -> str:
              return json.dumps(MOCK_RESPONSES["reflection_incomplete_delegated"])
         return json.dumps(MOCK_RESPONSES["reflection_complete"])
 
-    # --- Planning Logic (Updated for direct chat) ---
+    # Use the unique system prompt text to identify the agent and its task
     if "you are the chief technology officer" in prompt_lower:
-        if "review your previous attempts" in prompt_lower:
-            return json.dumps(MOCK_RESPONSES["cto_plan_assemble"])
-        else: # Initial task for CTO is always delegation
-            return json.dumps(MOCK_RESPONSES["cto_plan_delegate"])
+        # If the task is the specific delegated one, use the complex plan
+        if "oversee the creation" in prompt_lower:
+            if "review your previous attempts" in prompt_lower:
+                return json.dumps(MOCK_RESPONSES["cto_plan_assemble"])
+            else:
+                return json.dumps(MOCK_RESPONSES["cto_plan_delegate"])
+        else: # Otherwise, use the simple chat plan
+            return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
             
     elif "you are the lead programmer" in prompt_lower:
         # If the task is the specific delegated one, use the complex plan
