@@ -23,141 +23,87 @@ else:
 
 # --- Mock Responses ---
 MOCK_RESPONSES = {
+    "simple_chat_plan": {
+        "reasoning": "MOCK: The user sent a simple message. I will respond with a polite and helpful greeting.",
+        "actions": [{"tool_name": "SEND_MESSAGE_TO_USER", "payload": {"text": "Hello! How can I help you today?"}}]
+    },
     "cto_plan_delegate": {
-        "reasoning": "MOCK: As the CTO, my first step is to delegate the detailed work to my specialized team members. I will assign the API design to the Lead Programmer and the database schema to the Database Architect. My own task will then be blocked until they complete their work.",
+        "reasoning": "MOCK: The user wants me to oversee a project. I will delegate the work to my team and block myself until they are done.",
         "actions": [
-            {
-                "tool_name": "DELEGATE_TASK",
-                "payload": {
-                    "assignee_id": "agent_id_programmer_001",
-                    "description": "Design the RESTful API for the Dynamic Task Graph feature. The deliverable is a markdown file named 'api_spec.md' in the 'docs/' directory.",
-                    "block_self": True
-                }
-            },
-            {
-                "tool_name": "DELEGATE_TASK",
-                "payload": {
-                    "assignee_id": "agent_id_dba_001",
-                    "description": "Design the database schema for the Dynamic Task Graph. The deliverable is a markdown file named 'db_schema.md' in the 'docs/' directory.",
-                    "block_self": True
-                }
-            }
+            {"tool_name": "DELEGATE_TASK", "payload": {"assignee_id": "agent_id_programmer_001", "description": "Please design the RESTful API for the new feature.", "block_self": True}},
+            {"tool_name": "DELEGATE_TASK", "payload": {"assignee_id": "agent_id_dba_001", "description": "Please design the database schema for the new feature.", "block_self": True}}
         ]
     },
     "programmer_plan": {
-        "reasoning": "MOCK: My task is to design and document the API. I will create the file and write a detailed specification for all necessary endpoints. I will not message the user directly.",
-        "actions": [
-            {"tool_name": "CREATE_FILE", "payload": {"path": "docs/api_spec.md"}},
-            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/api_spec.md", "content": "# MOCK API Specification\n\n- POST /tasks\n- GET /tasks/{id}\n"}}
-        ]
+        "reasoning": "MOCK: My task is to design the API. I will create the file and write the spec.",
+        "actions": [{"tool_name": "WRITE_FILE", "payload": {"path": "docs/api_spec.md", "content": "# MOCK API Specification\n..."}}]
     },
     "dba_plan": {
-        "reasoning": "MOCK: My task is to design the database schema. I will create a file and write the schema using SQL DDL.",
-        "actions": [
-            {"tool_name": "CREATE_FILE", "payload": {"path": "docs/db_schema.md"}},
-            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/db_schema.md", "content": "-- MOCK Database Schema\n\nCREATE TABLE tasks (...);\n"}}
-        ]
+        "reasoning": "MOCK: My task is to design the database schema. I will create a file and write the schema.",
+        "actions": [{"tool_name": "WRITE_FILE", "payload": {"path": "docs/db_schema.md", "content": "-- MOCK Database Schema\n..."}}]
     },
     "cto_plan_assemble": {
-        "reasoning": "MOCK: My team has completed their work. I will read their files, MEMORIZE the key information, RECALL it to ensure it's in my memory, and then write the final specification.",
+        "reasoning": "MOCK: My team has completed their work. I will read their files and assemble the final spec, then inform the user.",
         "actions": [
-            {
-                "tool_name": "MEMORIZE_THIS", 
-                "payload": {
-                    "text": "The API spec was created by the Lead Programmer.",
-                    "metadata": {"source": "CTO's thought"}
-                }
-            },
-            {
-                "tool_name": "RECALL_CONTEXT", 
-                "payload": {
-                    "query": "Who created the API spec?"
-                }
-            },
-            {
-                "tool_name": "WRITE_FILE", 
-                "payload": {
-                    "path": "docs/final_spec.md", 
-                    "content": "# MOCK FINAL SPECIFICATION\n\nAssembled by the CTO."
-                }
-            },
-            {
-                "tool_name": "SEND_MESSAGE_TO_USER",
-                "payload": {
-                    "text": "My team has completed their assignments and I have assembled the final technical specification. The project is complete."
-                }
-            },
+            {"tool_name": "READ_FILE", "payload": {"path": "docs/api_spec.md"}},
+            {"tool_name": "READ_FILE", "payload": {"path": "docs/db_schema.md"}},
+            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/final_spec.md", "content": "# MOCK FINAL SPECIFICATION"}},
+            {"tool_name": "SEND_MESSAGE_TO_USER", "payload": {"text": "My team has completed their assignments and I have assembled the final technical specification."}}
         ]
     },
-    "simple_chat_plan": {
-        "reasoning": "MOCK: The user sent a simple message. I will respond with a polite and helpful greeting.",
-        "actions": [
-            {
-                "tool_name": "SEND_MESSAGE_TO_USER",
-                "payload": {"text": "Hello! How can I help you today?"}
-            }
-        ]
-    },
-    "reflection_incomplete_delegated": {
-        "critique": "MOCK: I have successfully delegated the sub-tasks for the API and database design. My own work is now blocked pending their completion. The task is therefore not complete.",
+    "reflection_incomplete": {
+        "critique": "MOCK: I have successfully delegated the sub-tasks. My own work is now pending their completion.",
         "is_complete": False
     },
     "reflection_complete": {
-        "critique": "MOCK: The execution was flawless and the results perfectly match the plan. The task is fully complete.",
+        "critique": "MOCK: The execution was flawless and the results perfectly match the plan.",
         "is_complete": True
     }
 }
 
 def _get_mock_response(prompt: str) -> str:
-    """
-    Selects an appropriate mock response based on more specific keywords in the prompt.
-    """
+    """Selects an appropriate mock response based on the agent and task."""
     print("  -> MOCK MODE: Generating mock response...")
     prompt_lower = prompt.lower()
 
-    # --- Reflection Logic (Unchanged) ---
+    # --- Reflection Logic ---
     if "reflect on your work" in prompt_lower:
         if "chief technology officer" in prompt_lower and "delegate_task" in prompt.lower():
-             return json.dumps(MOCK_RESPONSES["reflection_incomplete_delegated"])
+             return json.dumps(MOCK_RESPONSES["reflection_incomplete"])
         return json.dumps(MOCK_RESPONSES["reflection_complete"])
 
-    # Use the unique system prompt text to identify the agent and its task
+    # --- Planning Logic ---
+    task_description = prompt_lower.split("your assigned task is:")[1].split("your available tools are:")[0]
+
     if "you are the chief technology officer" in prompt_lower:
-        # If the task is the specific delegated one, use the complex plan
-        if "oversee the creation" in prompt_lower:
+        if "oversee" in task_description or "specification" in task_description:
             if "review your previous attempts" in prompt_lower:
                 return json.dumps(MOCK_RESPONSES["cto_plan_assemble"])
             else:
                 return json.dumps(MOCK_RESPONSES["cto_plan_delegate"])
-        else: # Otherwise, use the simple chat plan
+        else:
             return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
             
     elif "you are the lead programmer" in prompt_lower:
-        # If the task is the specific delegated one, use the complex plan
-        if "design the restful api" in prompt_lower:
+        if "design the restful api" in task_description:
             return json.dumps(MOCK_RESPONSES["programmer_plan"])
-        else: # Otherwise, use the simple chat plan
+        else:
+
             return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
         
     elif "you are the database architect" in prompt_lower:
-        # If the task is the specific delegated one, use the complex plan
-        if "design the database schema" in prompt_lower:
+        if "design the database schema" in task_description:
             return json.dumps(MOCK_RESPONSES["dba_plan"])
-        else: # Otherwise, use the simple chat plan
+        else:
             return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
 
-    # Default fallback
     return json.dumps(MOCK_RESPONSES["simple_chat_plan"])
 
 # --- Main API Function ---
 def generate_structured_response(prompt: str) -> str | None:
-    """
-    Main function to get a response. Switches between real and mock mode.
-    """
     if MOCK_MODE:
         return _get_mock_response(prompt)
-
-    # --- Real API Call with Retry Logic ---
+    
     max_retries = 3
     for attempt in range(max_retries):
         try:
