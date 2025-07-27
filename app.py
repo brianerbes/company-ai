@@ -82,7 +82,11 @@ def main(page: ft.Page):
 
     # --- UI Controls ---
     chat_view = ft.ListView(expand=True, spacing=10, padding=20)
-    message_input = ft.TextField(hint_text="Type a message...", expand=True)
+    message_input = ft.TextField(
+        hint_text="Type a message...",
+        expand=True,
+        on_submit=send_message  # <-- ADD THIS LINE
+    )
 
     def on_message(msg):
         """PubSub handler to display messages from the backend."""
@@ -144,16 +148,21 @@ def main(page: ft.Page):
         chat_view.controls.append(ft.Text(f"Conversation with {selected_agent.role}", size=20, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER))
         chat_view.controls.append(ft.Divider())
 
+        # Load and display the chat history
         for message in selected_agent.chat_history:
             speaker = message.get("speaker")
             text = message.get("text")
             mtype = message.get("type")
 
-            if speaker == "You":
+            # Apply the same filtering logic as on_message
+            if mtype == "user":
                 chat_view.controls.append(ft.Text(f"You: {text}", size=14, weight=ft.FontWeight.BOLD))
-            else:
-                color = "white50" if mtype == "info" else "white"
-                chat_view.controls.append(ft.Text(f"{speaker}: {text}", size=14, italic=(mtype == "info"), color=color))
+            elif mtype == "user_facing" or mtype == "system":
+                is_system = mtype == "system"
+                chat_view.controls.append(
+                    ft.Text(f"{speaker}: {text}", size=14, italic=is_system, color="white50" if is_system else "white")
+                )
+            # All other message types (like 'agent' internal monologue and 'info') are now ignored when loading history.
         
         def scroll_async():
             """Gives the UI a moment to render before scrolling."""

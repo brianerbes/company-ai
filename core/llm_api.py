@@ -45,11 +45,10 @@ MOCK_RESPONSES = {
         ]
     },
     "programmer_plan": {
-        "reasoning": "MOCK: My task is to design the API. I will create the file, write the spec, and then inform the user that I am done.",
+        "reasoning": "MOCK: My task is to design and document the API. I will create the file and write a detailed specification for all necessary endpoints. I will not message the user directly.",
         "actions": [
             {"tool_name": "CREATE_FILE", "payload": {"path": "docs/api_spec.md"}},
-            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/api_spec.md", "content": "# MOCK API Specification\n\n- POST /tasks\n- GET /tasks/{id}\n"}},
-            {"tool_name": "SEND_MESSAGE_TO_USER", "payload": {"text": "I have completed the draft for the API specification. You can find it at 'docs/api_spec.md'."}}
+            {"tool_name": "WRITE_FILE", "payload": {"path": "docs/api_spec.md", "content": "# MOCK API Specification\n\n- POST /tasks\n- GET /tasks/{id}\n"}}
         ]
     },
     "dba_plan": {
@@ -81,7 +80,13 @@ MOCK_RESPONSES = {
                     "path": "docs/final_spec.md", 
                     "content": "# MOCK FINAL SPECIFICATION\n\nAssembled by the CTO."
                 }
-            }
+            },
+            {
+                "tool_name": "SEND_MESSAGE_TO_USER",
+                "payload": {
+                    "text": "My team has completed their assignments and I have assembled the final technical specification. The project is complete."
+                }
+            },
         ]
     },
     "reflection_incomplete_delegated": {
