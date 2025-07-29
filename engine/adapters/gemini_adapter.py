@@ -11,7 +11,11 @@ from .base_adapter import BaseLLMAdapter
 class GeminiAdapter(BaseLLMAdapter):
     """The concrete adapter for interacting with the Google Gemini API."""
 
-    def __init__(self, model_name: str = "gemini-1.5-flash-latest"):
+    def __init__(
+        self,
+        generative_model_name: str = "gemini-1.5-flash-latest",
+        embedding_model_name: str = "text-embedding-004",
+    ):
         """
         Initializes the Gemini adapter.
 
@@ -21,21 +25,21 @@ class GeminiAdapter(BaseLLMAdapter):
         an api_key.
 
         Args:
-            model_name: The specific Gemini model to use for requests.
+            generative_model_name: The specific Gemini model for text generation.
+            embedding_model_name: The specific model for text embeddings.
         """
-        # The library automatically uses GOOGLE_APPLICATION_CREDENTIALS
-        # if they are set in the environment.
         if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
             raise EnvironmentError(
                 "GOOGLE_APPLICATION_CREDENTIALS environment variable not set."
             )
         genai.configure()
-        self.model = genai.GenerativeModel(model_name)
+        self.generative_model = genai.GenerativeModel(generative_model_name)
+        self.embedding_model_name = embedding_model_name
 
     def generate_text(self, prompt: str, **kwargs: Any) -> str:
         """Generates a simple text response using the Gemini API."""
         try:
-            response = self.model.generate_content(prompt, **kwargs)
+            response = self.generative_model.generate_content(prompt, **kwargs)
             return response.text
         except Exception as e:
             # Handle potential API errors gracefully.
@@ -48,8 +52,6 @@ class GeminiAdapter(BaseLLMAdapter):
         """
         Generates a structured JSON object using Gemini's JSON mode.
         """
-        # For now, we are returning a placeholder.
-        # The actual implementation requires setting up the model for JSON mode.
         # TODO: Implement proper JSON mode generation.
         print(
             "Warning: generate_structured_json is not fully implemented. "
@@ -68,11 +70,14 @@ class GeminiAdapter(BaseLLMAdapter):
         """
         Generates a numerical vector embedding for a given text.
         """
-        # For now, we are returning a placeholder.
-        # The actual implementation requires calling an embedding model.
-        # TODO: Implement embedding generation with a model like 'text-embedding-004'.
-        print(
-            "Warning: generate_embedding is not fully implemented. "
-            "Returning a placeholder vector."
-        )
-        return [0.0] * 768  # Return a dummy vector of the correct dimension.
+        try:
+            # Use the dedicated embedding API from the genai library.
+            result = genai.embed_content(
+                model=self.embedding_model_name, content=text, **kwargs
+            )
+            return result["embedding"]
+        except Exception as e:
+            print(f"Error during Gemini embedding API call: {e}")
+            # Return a zero vector as a fallback to prevent crashes.
+            # A more robust system might use a specific error-handling strategy.
+            return [0.0] * 768
