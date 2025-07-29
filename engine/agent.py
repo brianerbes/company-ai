@@ -54,9 +54,16 @@ class Agent:
         print(f"Agent {self.id} starting task: {task.description}")
         task.status = TaskStatus.IN_PROGRESS
 
-        # For now, assume all tasks are "simple_chat".
-        # TODO: Add routing logic based on task.intent.
-        self._handle_simple_chat(task)
+        # --- Cognitive Path Selection ---
+        # Use the company's router to classify the task's intent.
+        intent = self.company.router.classify(task.description, self)
+        print(f"Router classified intent as: '{intent}'")
+
+        if intent == "simple_chat":
+            self._handle_simple_chat(task)
+        else:
+            # For now, other intents will be handled as complex tasks.
+            self._handle_complex_task(task)
 
         print(f"Agent {self.id} finished task: {task.description}")
 
@@ -68,12 +75,10 @@ class Agent:
         print(f"Handling simple chat for task: {task.description}")
 
         # --- 1. Generate Response using LLM ---
-        # Construct a simple prompt and get the response from the LLM adapter.
         prompt = f"{self.system_prompt}\n\nUser command: {task.description}"
         llm_response = self.company.llm_adapter.generate_text(prompt)
 
         # --- 2. Plan Generation ---
-        # Create a plan to send the LLM's response back to the user.
         plan = [
             {
                 "tool_name": "SEND_MESSAGE",
@@ -93,5 +98,21 @@ class Agent:
             task.status = TaskStatus.FAILED
 
     def _handle_complex_task(self, task: Task) -> None:
-        """Placeholder for the deep reasoning cognitive cycle."""
-        pass
+        """
+        Placeholder for the deep reasoning cognitive cycle.
+        For now, it sends a message indicating the feature is not implemented.
+        """
+        print(f"Handling complex task for task: {task.description}")
+        plan = [
+            {
+                "tool_name": "SEND_MESSAGE",
+                "payload": {
+                    "message": "I understand this is a complex task, but that "
+                    "cognitive path is still under development."
+                },
+            }
+        ]
+        orchestrator.execute_plan(
+            plan=plan, agent=self, company=self.company, task=task
+        )
+        task.status = TaskStatus.COMPLETED
