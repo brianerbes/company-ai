@@ -19,6 +19,8 @@ line_length = 88
 
 [tool.ruff]
 line-length = 88
+
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -30,7 +32,5 @@ select = [
 ignore = [
     "E501", # line too long, handled by black
 ]
-
-[tool.ruff.lint]
 # Allow unused variables in `__init__.py` files
 per-file-ignores."__init__.py" = ["F401"]
