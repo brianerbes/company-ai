@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 from uuid import UUID
 
+from .adapters.base_adapter import BaseLLMAdapter
+from .adapters.gemini_adapter import GeminiAdapter
 from .agent import Agent
 
 
@@ -21,6 +23,9 @@ class Company:
     name: str = field(init=False)
     manifest: Dict[str, Any] = field(init=False)
 
+    # --- Shared Services ---
+    llm_adapter: BaseLLMAdapter = field(init=False, repr=False)
+
     # --- Agent Management ---
     agents: Dict[UUID, Agent] = field(default_factory=dict, repr=False)
     agent_manifests: Dict[UUID, Path] = field(default_factory=dict, repr=False)
@@ -29,6 +34,7 @@ class Company:
     def __post_init__(self):
         """Initializes the company by loading manifests and building registries."""
         self._load_manifest()
+        self._initialize_services()
         self._discover_agents()
         self._build_registry()
 
@@ -41,6 +47,12 @@ class Company:
             self.name = self.manifest["identity"]["name"]
         except (FileNotFoundError, json.JSONDecodeError, KeyError) as exc:
             raise ValueError("Invalid or missing manifest.json file") from exc
+
+    def _initialize_services(self):
+        """Initializes and configures shared services like the LLM adapter."""
+        # For now, we hardcode the GeminiAdapter.
+        # Later, this could be configurable from the company_config.json.
+        self.llm_adapter = GeminiAdapter()
 
     def _discover_agents(self):
         """Discovers all agent manifest files within the workspace."""

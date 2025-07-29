@@ -62,34 +62,35 @@ class Agent:
 
     def _handle_simple_chat(self, task: Task) -> None:
         """
-        Handles simple conversational interactions by creating and executing a plan.
+        Handles simple conversational interactions by calling the LLM
+        and then executing a plan to send the response.
         """
         print(f"Handling simple chat for task: {task.description}")
 
-        # --- 1. Plan Generation (Simplified) ---
-        # In this simple case, the plan is just to send a message back.
-        # Later, an LLM call will generate this plan.
-        # For now, we'll echo the task description.
+        # --- 1. Generate Response using LLM ---
+        # Construct a simple prompt and get the response from the LLM adapter.
+        prompt = f"{self.system_prompt}\n\nUser command: {task.description}"
+        llm_response = self.company.llm_adapter.generate_text(prompt)
+
+        # --- 2. Plan Generation ---
+        # Create a plan to send the LLM's response back to the user.
         plan = [
             {
                 "tool_name": "SEND_MESSAGE",
-                "payload": {"message": f"Echoing your request: {task.description}"},
+                "payload": {"message": llm_response},
             }
         ]
 
-        # --- 2. Plan Execution ---
-        # The agent dispatches the plan to the orchestrator.
+        # --- 3. Plan Execution ---
         results = orchestrator.execute_plan(
             plan=plan, agent=self, company=self.company, task=task
         )
 
-        # --- 3. Process Results ---
-        # Check if the plan execution was successful.
+        # --- 4. Process Results ---
         if results and results[-1].status == ToolExecutionStatus.SUCCESS:
             task.status = TaskStatus.COMPLETED
         else:
             task.status = TaskStatus.FAILED
-            # TODO: Add more sophisticated error handling or retry logic.
 
     def _handle_complex_task(self, task: Task) -> None:
         """Placeholder for the deep reasoning cognitive cycle."""
