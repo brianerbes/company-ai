@@ -1,0 +1,22 @@
+# --- Core Application ---
+# For the UI Framework as hinted in Part 14
+flet
+
+# --- AI & Embeddings ---
+# For Gemini API access
+google-generativeai
+# Note: Add the Grok API client library here when available.
+
+# --- Data & Memory ---
+# For loading WorkPackages and other configs
+pyyaml
+# For the vector store as mentioned in Part 9
+chromadb
+
+# --- Tooling & Environment ---
+# For deterministic dependency management
+pip-tools
+# For automated quality gates
+pre-commit
+# For loading .env files
+python-dotenv

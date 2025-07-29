@@ -1,2 +1,0 @@
-Initial greeting received: Hi!
-Responding with acknowledgement.
