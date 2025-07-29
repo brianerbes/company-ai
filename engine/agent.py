@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List
 from uuid import UUID
 
+from tools.base_tool import ToolStatus as ToolExecutionStatus
+
 from . import orchestrator
 from .task import Task, TaskStatus
 
@@ -83,7 +85,7 @@ class Agent:
 
         # --- 3. Process Results ---
         # Check if the plan execution was successful.
-        if results and results[-1].status == TaskStatus.SUCCESS:
+        if results and results[-1].status == ToolExecutionStatus.SUCCESS:
             task.status = TaskStatus.COMPLETED
         else:
             task.status = TaskStatus.FAILED

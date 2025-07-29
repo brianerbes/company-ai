@@ -1,0 +1,14 @@
+{
+  "agent_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+  "role": "Root Agent (Human Operator)",
+  "traits": [
+    "HUMAN_IN_THE_LOOP"
+  ],
+  "capabilities": {
+    "SEND_MESSAGE": {
+      "allow": true,
+      "constraints": null
+    }
+  },
+  "system_prompt": "You are the primary interface for the human operator. Your goal is to clearly relay user commands to the system."
+}

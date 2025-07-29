@@ -1,0 +1,12 @@
+{
+  "identity": {
+    "name": "AlphaCorp",
+    "vision": "A test company for the CompanIA framework."
+  },
+  "governance": {
+    "max_iterations_per_task": 5
+  },
+  "hierarchy": {
+    "root_agent_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+  }
+}

@@ -16,6 +16,10 @@ class SendMessageTool(BaseTool):
     )
     is_high_risk: bool = False
 
+    def __init__(self, **kwargs: Any) -> None:
+        """Initializes the SendMessageTool."""
+        super().__init__(**kwargs)
+
     def execute(self, message: str, **kwargs: Any) -> ToolResult:
         """
         Executes the tool to send a message.
