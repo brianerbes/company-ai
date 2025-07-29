@@ -9,6 +9,7 @@ from uuid import UUID
 from .adapters.base_adapter import BaseLLMAdapter
 from .adapters.gemini_adapter import GeminiAdapter
 from .agent import Agent
+from .router import Router
 
 
 @dataclass
@@ -25,6 +26,7 @@ class Company:
 
     # --- Shared Services ---
     llm_adapter: BaseLLMAdapter = field(init=False, repr=False)
+    router: Router = field(init=False, repr=False)
 
     # --- Agent Management ---
     agents: Dict[UUID, Agent] = field(default_factory=dict, repr=False)
@@ -50,9 +52,8 @@ class Company:
 
     def _initialize_services(self):
         """Initializes and configures shared services like the LLM adapter."""
-        # For now, we hardcode the GeminiAdapter.
-        # Later, this could be configurable from the company_config.json.
         self.llm_adapter = GeminiAdapter()
+        self.router = Router()
 
     def _discover_agents(self):
         """Discovers all agent manifest files within the workspace."""
